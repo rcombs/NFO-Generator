@@ -193,8 +193,10 @@ if(parsedOpts.id){
 	}else{
 		if(basename.search(TVTitleRegex) != -1){
 			opts.type = TV;
+			getName();
 		}else{
 			opts.type = MOVIE;
+			getName();
 		}
 	}
 }
@@ -204,7 +206,7 @@ if(parsedOpts.id){
 function guessName(name, type){
 	if(type == "TV"){
 		// Match everything before the episode number
-		return basename.substring(0, (basename.search(TVTitleRegex) - 1));
+		return basename.substring(0, basename.search(TVTitleRegex));
 	}else{
 		// Match everything before one of a set of red flags for movie titles. They're all good indicators, but it's not 100% accurate.
 		var index = basename.search(MovieTitleRegex);
@@ -212,7 +214,7 @@ function guessName(name, type){
 			// No indicators. We did our best, but it's time to ask the user.
 			return false;
 		}
-		return basename.substring(0, (index - 1));
+		return basename.substring(0, index);
 	}
 }
 
@@ -229,7 +231,7 @@ function getName(){
 	}else{
 		// Name wasn't provided; Guess or ask.
 		var ask = function(){
-			i.question("What is the name of the TV show or movie?", function(name){
+			i.question("What is the name of the TV show or movie? ", function(name){
 				if(name.length == 0){
 					console.error("Please enter a name!");
 					ask();
@@ -321,6 +323,16 @@ function getEpisode(){
 	}
 }
 
+// Search TMDB for a movie
+function searchTMDB(){
+	//DEBUG!
+	takeAndUploadScreenshots(opts.path, 60, false, 2, function(data){
+		console.log(data);
+	}, function(){
+		console.log(arguments);
+	});
+}
+
 // Upload some data to Lookpic.
 /*
 	data: data to upload
@@ -331,14 +343,15 @@ function getEpisode(){
 function uploadLookpic(data, type, resize, callback){
 	uploader.postData({
 		doResize: resize != -1,
-		resize: resize,
-		submit: "Upload"
+		resize: Math.max(resize, 0),
+		submit: "Upload",
+		MAX_FILE_SIZE: "5000000"
 	},
 	[
 		{
 			type: type,
-			key: "image",
-			value: "image." + mime.extension(type),
+			keyname: "image",
+			valuename: "image." + mime.extension(type),
 			data: data	 
 		}
 	],
@@ -353,6 +366,7 @@ function uploadLookpic(data, type, resize, callback){
 		if(err){
 			throw(err);
 		}else{
+			console.log(res.body);
 			callback(res.body.match(/\[IMG\](.*)\[\/IMG\]/i)[1]);
 		}
 	});
@@ -362,7 +376,7 @@ function uploadLookpic(data, type, resize, callback){
 /*
 	path: path of the file to screenshot
 	time: time (hh:mm:ss) to take the screenshot at
-	size: frame size, either WxH or W*H
+	size: frame size, either WxH or W*H (default to the size of the video)
 	callback: called after the screenshot is taken with the data as an argument
 */
 function takeScreenshot(path, time, size, callback){
@@ -374,8 +388,13 @@ function takeScreenshot(path, time, size, callback){
 	}else{
 		size = ' -s ' + size.replace("x", "*");
 	}
-	return child_process.exec('ffmpeg -ss ' + time + ' -vframes 1 -i ' + path + ' -y' + size + ' -f image2 -vcodec png -', function(data) {
-		if(callback) {
+	return child_process.exec('ffmpeg -i ' + path + ' -ss ' + time + ' -vframes 1 -y' + size + ' -vcodec png -f image2 -', {
+		encoding: 'binary',
+		maxBuffer: 100000000*1024
+	}, function(error, data) {
+		if(error){
+			throw(error);
+		}else if(callback) {
 			callback(data);
 		}
 	});
@@ -384,13 +403,62 @@ function takeScreenshot(path, time, size, callback){
 // Takes a screenshot and uploads it to Lookpic.
 /*
 	path: Path of file to take the screenshot from
+	time: timecode (hh:mm:ss) to take the screenshot at
+	size: frame size, either WxH or W*H (default to the size of the video)
+	callback: called after the upload finishes with the image URL as an argument
 */
 function takeAndUploadScreenshot(path, time, size, callback){
 	takeScreenshot(path, time, size, function(data){
-		uploadLookpic(data, "image/png" -1, callback);
+		uploadLookpic(data, "image/png", -1, callback);
 	});
 }
 
+/**
+ * Returns a random integer between min and max
+ * Using Math.round() will give you a non-uniform distribution!
+ * | 0 is used as a faster replacement for Math.floor
+ */
+function getRandomInt (min, max) {
+    return ((Math.random() * (max - min + 1)) | 0) + min;
+}
 
-module.exports = {
-};
+// Pads a number to 2 digits (for H:M:S)
+function pad2(number){
+	return ((number < 10) ? "" : "0") + number.toString(10);
+}
+
+// Converts a seconds value to HH:MM:SS notation. | 0 is used as a faster replacement for Math.floor
+function secondsToHHMMSS(seconds){
+	var h, m, s;
+	s = seconds % 60;
+	m = ((seconds / 60) | 0) % 60;
+	h = ((seconds / 60) / 60) | 0;
+	return pad2(h) + ":" + pad2(m) + ":" + pad2(s);
+}
+
+// Takes and uploads screenshots at random points in the file. | 0 is used as a faster replacement for Math.floor
+/*
+	path: Path to take screenshots from
+	duration: Duration of the video file (in seconds)
+	size: Frame size, either WxH or W*H (default to the size of the video)
+	count: How many screenshots to take
+	callback: Function to call after all screenshots have been taken and uploaded (takes an array of URLs as an argument)
+	progressCallback: Function to call after each screenshot finishes uploading (takes 3 arguments: number of screenshots finished, total, and new URL)
+*/
+function takeAndUploadScreenshots(path, duration, size, count, callback, progressCallback){
+	var screenshotURLs = [];
+	var start = 0, increment = duration/count | 0, end = increment;
+	for(var i = 0; i < count; i++){
+		takeAndUploadScreenshot(path, secondsToHHMMSS(getRandomInt(start, end)), false, function(URL){
+			screenshotURLs.push(URL);
+			if(screenshotURLs.length == count){
+				callback(screenshotURLs);
+			}else if(progressCallback){
+				progressCallback(screenshotURLs.length, count, URL);
+			}
+		});
+		i++;
+		start = end;
+		end += increment;
+	}
+}
