@@ -16,5 +16,6 @@
   },
   "bin": {
     "MakeNFO": "./MakeNFO.js"
-  }
+  },
+  "preferGlobal": true
 }

@@ -5,7 +5,6 @@ var http = require("http"),
 	fs = require("fs"),
 	rl = require('readline'),
 	path = require("path"),
-	thumb = require("video-thumb"),
 	mediainfo = require("mediainfo"),
 	uploader = require("file-uploader"),
 	mime = require("mime"),
@@ -17,6 +16,9 @@ var	THETVDB_API_KEY = "88445D4B8F5F27A3",
 	TMDB_API_KEY = "5261508c7eb4c0ea4a7c335c8d8e2074",
 	THETVDB_API_PATH = "http://www.thetvdb.com/api/",
 	TMDB_API_PATH = "http://api.themoviedb.org/2.1/%/en/xml/" + TMDB_API_KEY + "/";
+	
+// Detect Windows
+var isWin = process.platform === 'win32';
 	
 // Set some constants
 var MOVIE = "M",
@@ -131,7 +133,7 @@ if(opts.output == "-"){
 }
 
 // Get the file's basename, remove the extension, and replace "." with " "
-var basename = path.basename(opts.path, path.extname(opts.path)).replace(s/\./\ /g);
+var basename = path.basename(opts.path, path.extname(opts.path)).replace(/\./g, " ");
 
 // Initiate readline interface (use stderr, as stdout may be used for output)
 var i = rl.createInterface(process.stdin, process.stderr, null);
@@ -364,16 +366,16 @@ function uploadLookpic(data, type, resize, callback){
 	callback: called after the screenshot is taken with the data as an argument
 */
 function takeScreenshot(path, time, size, callback){
-	if (!time) {
+	if(!time){
 		time = '00:00:01';
 	}
-	if (!size) {
+	if(!size){
 		size = '';
 	}else{
 		size = ' -s ' + size.replace("x", "*");
 	}
-	return exec('ffmpeg -ss ' + time + ' -vframes 1 -i ' + path + ' -y' + size + ' -f image2 -vcodec png -', function(data) {
-		if (callback) {
+	return child_process.exec('ffmpeg -ss ' + time + ' -vframes 1 -i ' + path + ' -y' + size + ' -f image2 -vcodec png -', function(data) {
+		if(callback) {
 			callback(data);
 		}
 	});
