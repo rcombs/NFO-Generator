@@ -344,14 +344,17 @@ function uploadLookpic(data, type, resize, callback){
 	request.post({
 		url: "http://lookpic.com/upload.php",
 		multipart: [
-			{name: "image", filename: "image.png", "Content-Type": "image/png", body: data},
-			{name: "MAX_FILE_SIZE", body: "5000000"},
-			{name: "resize", body: Math.max(resize, 0).toString(10)},
-			{name: "stat_resize", body: ((resize != -1) + 0).toString(10)},
-			{name: "submit", body: "Upload"}
+			{body: data, "Content-Type": type, "Content-Disposition": 'form-data; name="image"; filename="image.png"'},
+			{body: "5000000", "Content-Disposition": 'form-data; name="MAX_FILE_SIZE"'},
+			{body: Math.max(resize, 0).toString(10), "Content-Disposition": 'form-data; name="resize"'},
+			{body: ((resize != -1) + 0).toString(10), "Content-Disposition": 'form-data; name="stat_resize"'},
+			{body: "Upload", "Content-Disposition": 'form-data; name="submit"'}
 		],
 		headers: {
-			"Content-Type": "multipart/form-data"
+			"Content-Type": "multipart/form-data",
+			"Origin": "http://lookpic.com",
+			"Referer": "http://lookpic.com/",
+			"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 		}
 	}, function(err, res, body){
 		if(err){
