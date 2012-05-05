@@ -6,7 +6,7 @@ var http = require("http"),
 	rl = require('readline'),
 	path = require("path"),
 	mediainfo = require("mediainfo"),
-	uploader = require("file-uploader"),
+	request = require("request"),
 	mime = require("mime"),
 	nomnom = require("nomnom"),
 	child_process = require('child_process');
@@ -341,33 +341,24 @@ function searchTMDB(){
 	callback: Callback function; takes a posted image URL as an argument
 */
 function uploadLookpic(data, type, resize, callback){
-	uploader.postData({
-		doResize: resize != -1,
-		resize: Math.max(resize, 0),
-		submit: "Upload",
-		MAX_FILE_SIZE: "5000000"
-	},
-	[
-		{
-			type: type,
-			keyname: "image",
-			valuename: "image." + mime.extension(type),
-			data: data	 
+	request.post({
+		url: "http://lookpic.com/upload.php",
+		multipart: [
+			{name: "image", filename: "image.png", "Content-Type": "image/png", body: data},
+			{name: "MAX_FILE_SIZE", body: "5000000"},
+			{name: "resize", body: Math.max(resize, 0).toString(10)},
+			{name: "stat_resize", body: ((resize != -1) + 0).toString(10)},
+			{name: "submit", body: "Upload"}
+		],
+		headers: {
+			"Content-Type": "multipart/form-data"
 		}
-	],
-	{
-		host: "lookpic.com",
-		port: 80,
-		path: "/upload.php",
-		method: "POST"
-	},
-	{},
-	function(err, res){
+	}, function(err, res, body){
 		if(err){
 			throw(err);
 		}else{
-			console.log(res.body);
-			callback(res.body.match(/\[IMG\](.*)\[\/IMG\]/i)[1]);
+			console.log(body);
+			callback(body.match(/\[IMG\](.*)\[\/IMG\]/i)[1]);
 		}
 	});
 }
@@ -388,6 +379,7 @@ function takeScreenshot(path, time, size, callback){
 	}else{
 		size = ' -s ' + size.replace("x", "*");
 	}
+	console.log('ffmpeg -i ' + path + ' -ss ' + time + ' -vframes 1 -y' + size + ' -vcodec png -f image2 -');
 	return child_process.exec('ffmpeg -i ' + path + ' -ss ' + time + ' -vframes 1 -y' + size + ' -vcodec png -f image2 -', {
 		encoding: 'binary',
 		maxBuffer: 100000000*1024
@@ -423,8 +415,12 @@ function getRandomInt (min, max) {
 }
 
 // Pads a number to 2 digits (for H:M:S)
-function pad2(number){
-	return ((number < 10) ? "" : "0") + number.toString(10);
+function pad(number, len){
+	var str = number.toString(10);
+	while(str.length < len){
+		str = "0" + str;
+	}
+	return str;
 }
 
 // Converts a seconds value to HH:MM:SS notation. | 0 is used as a faster replacement for Math.floor
@@ -433,7 +429,7 @@ function secondsToHHMMSS(seconds){
 	s = seconds % 60;
 	m = ((seconds / 60) | 0) % 60;
 	h = ((seconds / 60) / 60) | 0;
-	return pad2(h) + ":" + pad2(m) + ":" + pad2(s);
+	return pad(h, 2) + ":" + pad(m, 2) + ":" + pad(s, 2);
 }
 
 // Takes and uploads screenshots at random points in the file. | 0 is used as a faster replacement for Math.floor
