@@ -344,7 +344,7 @@ function uploadLookpic(data, type, resize, callback){
 	request.post({
 		url: "http://lookpic.com/upload.php",
 		multipart: [
-			{body: data, "Content-Type": type, "Content-Disposition": 'form-data; name="image"; filename="image.png"'},
+			{body: data, "Content-Disposition": 'form-data; name="image"; filename="image.png"', "Content-Type": type},
 			{body: "5000000", "Content-Disposition": 'form-data; name="MAX_FILE_SIZE"'},
 			{body: Math.max(resize, 0).toString(10), "Content-Disposition": 'form-data; name="resize"'},
 			{body: ((resize != -1) + 0).toString(10), "Content-Disposition": 'form-data; name="stat_resize"'},
@@ -354,13 +354,13 @@ function uploadLookpic(data, type, resize, callback){
 			"Content-Type": "multipart/form-data",
 			"Origin": "http://lookpic.com",
 			"Referer": "http://lookpic.com/",
-			"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+			"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+			"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_3) AppleWebKit/536.10+ (KHTML, like Gecko) Version/5.1.5 Safari/534.55.3"
 		}
 	}, function(err, res, body){
 		if(err){
 			throw(err);
 		}else{
-			console.log(body);
 			callback(body.match(/\[IMG\](.*)\[\/IMG\]/i)[1]);
 		}
 	});
@@ -382,7 +382,6 @@ function takeScreenshot(path, time, size, callback){
 	}else{
 		size = ' -s ' + size.replace("x", "*");
 	}
-	console.log('ffmpeg -i ' + path + ' -ss ' + time + ' -vframes 1 -y' + size + ' -vcodec png -f image2 -');
 	return child_process.exec('ffmpeg -i ' + path + ' -ss ' + time + ' -vframes 1 -y' + size + ' -vcodec png -f image2 -', {
 		encoding: 'binary',
 		maxBuffer: 100000000*1024
