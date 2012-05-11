@@ -8,7 +8,13 @@
     "type": "git",
     "url": "git://github.com/11rcombs/NFO-Generator.git"
   },
-  "dependencies": {},
+  "dependencies": {
+    "mediainfo": ">=0.0.1",
+    "request": ">=2.9.202",
+    "mime": ">=1.2.5",
+    "nomnom": ">=1.5.1",
+    "xml2js": ">=0.1.14"
+  },
   "devDependencies": {},
   "optionalDependencies": {},
   "engines": {
