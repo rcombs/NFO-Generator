@@ -819,7 +819,7 @@ function takeScreenshot(path, time, size, callback){
 	}else{
 		size = ' -s ' + size.replace("x", "*");
 	}
-	return child_process.exec('ffmpeg -i "' + path + '" -ss ' + time + ' -vframes 1 -y' + size + ' -sameq -vcodec png -f image2 -', {
+	return child_process.exec((isWin ? 'ffmpeg.exe' : 'ffmpeg') + ' -i "' + path + '" -ss ' + time + ' -vframes 1 -y' + size + ' -sameq -vcodec png -f image2 -', {
 		maxBuffer: 1000000000*1024,
 		encoding: "binary"
 	}, function(error, data) {
