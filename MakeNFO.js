@@ -7,7 +7,6 @@ var http = require("http"),
 	path = require("path"),
 	child_process = require('child_process'),
 	querystring = require("querystring"),
-	mediainfo = require("mediainfo"),
 	request = require("request"),
 	mime = require("mime"),
 	nomnom = require("nomnom"),
@@ -523,12 +522,18 @@ function searchTMDB(){
 
 // Load the MediaInfo on a file
 function loadMediaInfo(){
-	mediainfo(parsedOpts.path, function(err, res){
+	child_process.exec((isWin ? "mediainfo.exe" : "mediainfo") + ' --Output=XML "' + parsedOpts.path + '"', function(err, data){
 		if(err){
 			throw(err);
 		}else{
-			meta.mediaInfo = res[0];
-			takeScreenshots();
+			parser.parseString(data, function(err, out){
+				if(err){
+					throw(err);
+				}else{
+					meta.mediaInfo = out;
+					takeScreenshots();
+				}
+			});
 		}
 	});
 }
@@ -551,7 +556,7 @@ function durationToSeconds(str){
 function takeScreenshots(){
 	if(parsedOpts.snapshotCount > 0){
 		console.error("Taking snapshots...");
-		takeAndUploadScreenshots(opts.path, durationToSeconds(meta.mediaInfo.duration), false, parsedOpts.snapshotCount, function(URLs, times){
+		takeAndUploadScreenshots(opts.path, durationToSeconds(meta.mediaInfo.File.track[0].Duration), false, parsedOpts.snapshotCount, function(URLs, times){
 			console.error("Finished taking screenshots.");
 			meta.screenshots = [];
 			for(var i = 0; i < URLs.count; i++){
