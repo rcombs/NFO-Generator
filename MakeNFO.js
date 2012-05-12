@@ -531,7 +531,7 @@ function loadMediaInfo(){
 	if(isMac){
 		mediaInfoPath = __dirname + "/deps/darwin/mediainfo";
 	}
-	child_process.exec(mediaInfoPath + ' --Output=XML "' + parsedOpts.path + '"', function(err, data){
+	child_process.exec('"' + mediaInfoPath + '" --Output=XML "' + parsedOpts.path + '"', function(err, data){
 		if(err){
 			throw(err);
 		}else{
@@ -839,7 +839,7 @@ function takeScreenshot(path, time, size, callback){
 	if(isMac){
 		ffmpegPath = __dirname + "/deps/darwin/ffmpeg";
 	}
-	return child_process.exec(ffmpegPath + ' -i "' + path + '" -ss ' + time + ' -vframes 1 -y' + size + ' -sameq -vcodec png -f image2 -', {
+	return child_process.exec('"' + ffmpegPath + '" -i "' + path + '" -ss ' + time + ' -vframes 1 -y' + size + ' -sameq -vcodec png -f image2 -', {
 		maxBuffer: 1000000000*1024,
 		encoding: "binary"
 	}, function(error, data) {
