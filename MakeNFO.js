@@ -589,8 +589,12 @@ function guessMoreMeta(){
 		return;
 	}
 	if(!opts.sourceMedia){
-		var match = basename.match(/\b((HDTV|HDRip|DTV|TV|PDTV|BluRay|BR|BD|DVD\d?|DVD-?R|R\d|CAM|TS|WEB(?:-?DL)?)(Rip)?)\b/i);
-		opts.sourceMedia = match[0];
+		var match = basename.match(/\b((?:HDTV|HDRip|DTV|TV|PDTV|BluRay|BR|BD|DVD\d?|DVD-?R|R\d|CAM|TS|WEB(?:-?DL)?)(?:-?Rip)?)\b/i);
+		if(match){
+			opts.sourceMedia = match[0];
+		}else{
+			opts.sourceMedia = "";
+		}
 	}
 }
 
