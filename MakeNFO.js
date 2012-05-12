@@ -196,7 +196,7 @@ var outStream;
 if(opts.output == "-"){
 	outStream = process.stdout;
 }else{
-	outStream = fs.createWriteStream(opts.output, {mode: 644});
+	outStream = fs.createWriteStream(opts.output, {mode: 0644});
 	outStream.on("error", function(error){
 		if(error.code == "EACCES"){
 			errorDie("Could not write to output file: \"" + opts.output + "\" (access denied)!");
