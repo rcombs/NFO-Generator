@@ -168,6 +168,12 @@ if(parsedOpts.sourceMedia){
 	opts.sourceMedia = parsedOpts.sourceMedia;
 }
 
+if(parsedOpts.signature){
+	opts.signature = parsedOpts.signature;
+}else{
+	opts.signature = "";
+}
+
 // Function to bug out in errors
 function errorDie(message){
 	console.error(message);
@@ -568,7 +574,7 @@ function takeScreenshots(){
 		takeAndUploadScreenshots(opts.path, durationToSeconds(meta.mediaInfo.track[0].Duration), false, parsedOpts.snapshotCount, function(URLs, times){
 			console.error("Finished taking screenshots.");
 			meta.screenshots = [];
-			for(var i = 0; i < URLs.count; i++){
+			for(var i = 0; i < URLs.length; i++){
 				meta.screenshots.push({
 					URL: URLs[i],
 					time: times[i]
@@ -700,7 +706,11 @@ function formatCast(){
 			break;
 		}
 	}
-	return str + imageString + "[/center]\n" + peopleStr;
+	if(imageCount > 0){
+		return str + peopleStr;
+	}else{
+		return str + imageString + "[/center]\n" + peopleStr;
+	}
 }
 
 function formatScreens(){
