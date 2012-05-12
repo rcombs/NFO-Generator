@@ -679,7 +679,7 @@ function formatTitle(){
 
 function formatMediaInfo(){
 	return "[icon=details2]\n"+
-	"TODO: Write MediaInfo Formatter";
+	"TODO: Write MediaInfo Formatter\n";
 }
 
 function formatCast(){
@@ -745,7 +745,7 @@ function formatInfo(){
 	if(opts.formats.infoFormat){
 		format = opts.formats.infoFormat;
 	}else{
-		format = "[icon=info2]\n TODO: WRITE INFO FORMATTER";
+		format = "[icon=info2]\n TODO: WRITE INFO FORMATTER\n";
 	}
 	return format;
 }
