@@ -55,6 +55,8 @@ function TVDBDynamicRequest(inf, args, callback){
 	
 // Detect Windows
 var isWin = process.platform === 'win32';
+// Detect OSX
+var isMac = process.platform === 'darwin';
 	
 // Set some constants
 var MOVIE = "M",
@@ -522,7 +524,14 @@ function searchTMDB(){
 
 // Load the MediaInfo on a file
 function loadMediaInfo(){
-	child_process.exec((isWin ? "mediainfo.exe" : "mediainfo") + ' --Output=XML "' + parsedOpts.path + '"', function(err, data){
+	var mediaInfoPath = "ffmpeg";
+	if(isWin){
+		mediaInfoPath = __dirname + "/deps/win32/mediainfo.exe";
+	}
+	if(isMac){
+		mediaInfoPath = __dirname + "/deps/darwin/mediainfo";
+	}
+	child_process.exec(mediaInfoPath + ' --Output=XML "' + parsedOpts.path + '"', function(err, data){
 		if(err){
 			throw(err);
 		}else{
@@ -530,7 +539,7 @@ function loadMediaInfo(){
 				if(err){
 					throw(err);
 				}else{
-					meta.mediaInfo = out;
+					meta.mediaInfo = out.File;
 					takeScreenshots();
 				}
 			});
@@ -556,7 +565,7 @@ function durationToSeconds(str){
 function takeScreenshots(){
 	if(parsedOpts.snapshotCount > 0){
 		console.error("Taking snapshots...");
-		takeAndUploadScreenshots(opts.path, durationToSeconds(meta.mediaInfo.File.track[0].Duration), false, parsedOpts.snapshotCount, function(URLs, times){
+		takeAndUploadScreenshots(opts.path, durationToSeconds(meta.mediaInfo.track[0].Duration), false, parsedOpts.snapshotCount, function(URLs, times){
 			console.error("Finished taking screenshots.");
 			meta.screenshots = [];
 			for(var i = 0; i < URLs.count; i++){
@@ -583,7 +592,6 @@ function guessMoreMeta(){
 		var match = basename.match(/\b((HDTV|HDRip|DTV|TV|PDTV|BluRay|BR|BD|DVD\d?|DVD-?R|R\d|CAM|TS|WEB(?:-?DL)?)(Rip)?)\b/i);
 		opts.sourceMedia = match[0];
 	}
-	console.dir(meta.mediaInfo);
 }
 
 var waitCalled = false;
@@ -599,8 +607,8 @@ function waitThenFormatOutput(){
 
 function getQuality(){
 	var vertical, horizontal;
-	for(var i = 0; i < meta.mediaInfo.tracks.length; i++){
-		var track = meta.mediaInfo.tracks[i];
+	for(var i = 0; i < meta.mediaInfo.track.length; i++){
+		var track = meta.mediaInfo.track[i];
 		if(track.type != "Video"){
 			continue;
 		}
@@ -627,11 +635,11 @@ function getQuality(){
 
 function getCodecs(){
 	var videoCodec, audioCodecs = [];
-	for(var i = 0; i < meta.mediaInfo.tracks.length; i++){
-		if(meta.mediaInfo.tracks[i].type == "Video"){
-			videoCodec = meta.mediaInfo.tracks[i].format;
-		}else if(meta.mediaInfo.tracks[i].type == "Audio"){
-			audioCodecs.push(meta.mediaInfo.tracks[i].format);
+	for(var i = 0; i < meta.mediaInfo.track.length; i++){
+		if(meta.mediaInfo.track[i].type == "Video"){
+			videoCodec = meta.mediaInfo.track[i].format;
+		}else if(meta.mediaInfo.track[i].type == "Audio"){
+			audioCodecs.push(meta.mediaInfo.track[i].format);
 		}
 	}
 	return videoCodec + (audioCodecs.length > 0 ? ((videoCodec ? (videoCodec + "/") : "") + audioCodecs.join("/")) : "");
@@ -824,7 +832,14 @@ function takeScreenshot(path, time, size, callback){
 	}else{
 		size = ' -s ' + size.replace("x", "*");
 	}
-	return child_process.exec((isWin ? 'ffmpeg.exe' : 'ffmpeg') + ' -i "' + path + '" -ss ' + time + ' -vframes 1 -y' + size + ' -sameq -vcodec png -f image2 -', {
+	var ffmpegPath = "ffmpeg";
+	if(isWin){
+		ffmpegPath = __dirname + "/deps/win32/ffmpeg.exe";
+	}
+	if(isMac){
+		ffmpegPath = __dirname + "/deps/darwin/ffmpeg";
+	}
+	return child_process.exec(ffmpegPath + ' -i "' + path + '" -ss ' + time + ' -vframes 1 -y' + size + ' -sameq -vcodec png -f image2 -', {
 		maxBuffer: 1000000000*1024,
 		encoding: "binary"
 	}, function(error, data) {
