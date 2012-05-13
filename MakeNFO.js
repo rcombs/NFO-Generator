@@ -25,7 +25,18 @@ var parser = new xml2js.Parser();
 function TMDBRequest(method, arg, callback){
 	var url = TMDB_API_PATH.replace("%method%", method).replace("%lang%", LANGUAGE).replace("%type%", "json").replace("%key%", TMDB_API_KEY).replace("%arg%", arg);
 	request({url: url}, function(error, response, body){
-		callback(error, JSON.parse(body));
+		if(error){
+			callback(error);
+		}else{
+			var out;
+			try{
+				out = JSON.parse(body);
+			}catch(e){
+				console.error(body);
+				throw(e);
+			}
+			callback(null, out);
+		}
 	});
 }
 function TVDBStaticRequest(path, callback){
@@ -554,7 +565,7 @@ function loadMediaInfo(){
 }
 
 function durationToSeconds(str){
-	var hms = str.match(/(?:([0-9]+)h )?([0-9+])mn(?: ([0-9]+)s)/);
+	var hms = str.match(/^(?:(\d+)h )?(\d+)mn?(?: (\d+)s)?$/);
 	var seconds = 0;
 	if(hms[1]){
 		seconds += parseInt(hms[1], 10)*60*60;
