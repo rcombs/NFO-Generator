@@ -382,9 +382,8 @@ function getName(){
 function getYear(){
 	if(!parsedOpts.noGuess){
 		var match = basename.match(MovieTitleRegex);
-		var year = match[1];
-		if(year){
-			opts.year = year;
+		if(match){
+			opts.year = match[1];
 		}
 	}
 	searchTMDB();
