@@ -540,7 +540,7 @@ function searchTMDB(){
 
 // Load the MediaInfo on a file
 function loadMediaInfo(){
-	var mediaInfoPath = "ffmpeg";
+	var mediaInfoPath = "mediainfo";
 	if(isWin){
 		mediaInfoPath = __dirname + "/deps/win32/mediainfo.exe";
 	}
