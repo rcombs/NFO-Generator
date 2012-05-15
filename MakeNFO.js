@@ -760,6 +760,15 @@ function formatInfo(){
 	return format;
 }
 
+function formatTrailer(){
+	var format = "[icon=trailer2]\n[video=%YOUTUBE_URL%]";
+	if(meta.trailer){
+		return format.replace("%YOUTUBE_URL%", meta.trailer);
+	}else{
+		return "";
+	}
+}
+
 function formatPlot(){
 	return "[icon=plot2]\n" + meta.plot;
 }
@@ -782,6 +791,7 @@ function formatOutput(){
 					"%PLOT%\n" + 
 					"%MEDIAINFO%\n" +
 					"%CAST%\n" +
+					"%TRAILER%\n" +
 					"%SCREENS%\n" +
 					"%NOTE%\n" +
 					"[/b]\n" + 
@@ -797,6 +807,7 @@ function formatOutput(){
 					.replace("%INFO%", formatInfo())
 					.replace("%MEDIAINFO%", formatMediaInfo())
 					.replace("%CAST%", formatCast())
+					.replace("%TRAILER%", formatTrailer())
 					.replace("%SCREENS%", formatScreens())
 					.replace("%NOTE%", formatNote())
 					.replace("%SIGNATURE%", opts.signature);
