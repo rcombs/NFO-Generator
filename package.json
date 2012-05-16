@@ -2,7 +2,7 @@
   "author": "11rcombs (https://github.com/11rcombs)",
   "name": "NFO-Generator",
   "description": "Generates an NFO for a video file",
-  "version": "0.0.0r16",
+  "version": "0.0.0r17",
   "homepage": "https://github.com/11rcombs/NFO-Generator",
   "repository": {
     "type": "git",
