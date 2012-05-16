@@ -22,18 +22,24 @@ var	TVDB_API_KEY = "88445D4B8F5F27A3",
 var parser = new xml2js.Parser();
 	
 // Helper functions for TMDB and TVDB
-function TMDBRequest(method, arg, callback){
+function TMDBRequest(method, arg, callback, i){
+	if(!i){
+		i = 0;
+	}
+	if(i > 3){
+		// Retry 3 times, then give up
+		errDie("TMDB is offline!");
+	}
 	var url = TMDB_API_PATH.replace("%method%", method).replace("%lang%", LANGUAGE).replace("%type%", "json").replace("%key%", TMDB_API_KEY).replace("%arg%", arg);
 	request({url: url}, function(error, response, body){
 		if(error){
-			callback(error);
+			TMDBRequest(method, arg, callback, i+1);
 		}else{
 			var out;
 			try{
 				out = JSON.parse(body);
 			}catch(e){
-				console.error(body);
-				throw(e);
+				TMDBRequest(method, arg, callback, i+1);
 			}
 			callback(null, out);
 		}
@@ -173,7 +179,8 @@ var parsedOpts = nomnom
 var opts = {
 		formats: {}
 	},
-    meta = {};
+    meta = {},
+    mediaInfo;
 
 if(parsedOpts.sourceMedia){
 	opts.sourceMedia = parsedOpts.sourceMedia;
@@ -453,7 +460,7 @@ function loadMovie(id){
 
 function parseMovie(movie){
 	meta.title = movie.name;
-	meta.db_url = "http://imdb.com/title/" + movie.imdb_id;
+	meta.imdb_url = "http://imdb.com/title/" + movie.imdb_id;
 	meta.plot = movie.overview;
 	meta.score = movie.rating;
 	meta.rating = movie.certification;
@@ -559,7 +566,7 @@ function loadMediaInfo(){
 					for(var i = 0; i < tracks.length; i++){
 						tracks[i].type = tracks[i]["@"].type;
 					}
-					meta.mediaInfo = out.File.track;
+					mediaInfo = out.File.track;
 					takeScreenshots();
 				}
 			});
@@ -585,7 +592,7 @@ function durationToSeconds(str){
 function takeScreenshots(){
 	if(parsedOpts.snapshotCount > 0){
 		console.error("Taking snapshots...");
-		takeAndUploadScreenshots(opts.path, durationToSeconds(meta.mediaInfo[0].Duration), false, parsedOpts.snapshotCount, function(URLs, times){
+		takeAndUploadScreenshots(opts.path, durationToSeconds(mediaInfo[0].Duration), false, parsedOpts.snapshotCount, function(URLs, times){
 			console.error("Finished taking screenshots.");
 			meta.screenshots = [];
 			for(var i = 0; i < URLs.length; i++){
@@ -631,13 +638,13 @@ function waitThenFormatOutput(){
 
 function getQuality(){
 	var vertical, horizontal;
-	for(var i = 0; i < meta.mediaInfo[0].length; i++){
-		var track = meta.mediaInfo[i];
+	for(var i = 0; i < mediaInfo[0].length; i++){
+		var track = mediaInfo[i];
 		if(track.type != "Video"){
 			continue;
 		}
-		vertical = parseInt(track.height.match(/^([0-9 ]+) pixels/)[1].replace(" ", ""), 10);
-		horizontal = parseInt(track.width.match(/^([0-9 ]+) pixels/)[1].replace(" ", ""), 10);
+		vertical = parseInt(track.Height.match(/^([0-9 ]+) pixels/)[1].replace(" ", ""), 10);
+		horizontal = parseInt(track.Width.match(/^([0-9 ]+) pixels/)[1].replace(" ", ""), 10);
 	}
 	if(!horizontal || !vertical){
 		return "";
@@ -659,14 +666,16 @@ function getQuality(){
 
 function getCodecs(){
 	var videoCodec, audioCodecs = [];
-	for(var i = 0; i < meta.mediaInfo.length; i++){
-		if(meta.mediaInfo[i].type == "Video"){
-			videoCodec = meta.mediaInfo[i].format;
-		}else if(meta.mediaInfo[i].type == "Audio"){
-			audioCodecs.push(meta.mediaInfo[i].format);
+	for(var i = 0; i < mediaInfo.length; i++){
+		if(mediaInfo[i].type == "Video"){
+			videoCodec = mediaInfo[i].Format;
+		}else if(mediaInfo[i].type == "Audio"){
+			if(audioCodecs.indexOf(mediaInfo[i].Format) == -1){
+				audioCodecs.push(mediaInfo[i].Format);
+			}
 		}
 	}
-	return videoCodec + (audioCodecs.length > 0 ? ((videoCodec ? (videoCodec + "/") : "") + audioCodecs.join("/")) : "");
+	return videoCodec + (audioCodecs.length > 0 ? "/" : "") + audioCodecs.join("-");
 }
 
 function formatTitle(){
@@ -674,7 +683,7 @@ function formatTitle(){
 	if(opts.titleFormat){
 		format = opts.titleFormat;
 	}else{
-		format = "%TITLE% (%YEAR%) - %QUALITY% - %SOURCEMEDIA% - %CODECS% - %SOURCE% - %USER%";
+		format = "%TITLE% (%YEAR%) - %QUALITY% - %CODECS% - %SOURCEMEDIA% - %SOURCE% - %USER%";
 	}
 	var title = format
 		.replace("%TITLE%", meta.title)
@@ -692,8 +701,22 @@ function formatTitle(){
 }
 
 function formatMediaInfo(){
-	return "[icon=details2]\n"+
-	"TODO: Write MediaInfo Formatter\n";
+	var colors = ["yellow", "blue", "green", "orange", "red"];
+	var out = "[icon=details2]";
+	for(var i = 0; i < mediaInfo.length; i++){
+		var track = mediaInfo[i];
+		var color = colors[i%5];
+		out += "\n[color=" + color + "]" + track.type + "[/color]\n";
+		for(var j in track){
+			if(track.hasOwnProperty(j) && j.substring(0, 1).toLowerCase() != j.substring(0, 1)){
+				if(j == "Complete_name"){
+					track[j] = path.basename(track[j]);
+				}
+				out += j.replace(/_/g, " ") + ": " + track[j] + "\n";
+			}
+		}
+	}
+	return out;
 }
 
 function formatCast(){
@@ -756,13 +779,50 @@ function formatNote(){
 	}
 }
 
+function formatList(list){
+	var str = "";
+	for(var i = 0; i < list.length; i++){
+		if(list[i].url){
+			str += "[url=" + list[i].url + "]" + list[i].name + "[/url]";
+		}else{
+			str += list.name;
+		}
+		if(i < list.length - 1){
+			str += ", ";
+		}
+	}
+	return str;
+}
+
+function formatGenres(){
+	
+}
+
 function formatInfo(){
 	var format = "";
 	if(opts.formats.infoFormat){
 		format = opts.formats.infoFormat;
 	}else{
-		format = "[icon=info2]\n TODO: WRITE INFO FORMATTER\n";
+		format = 	"[icon=info2]\n"+
+					"Title: %TITLE%\n"+
+					"Year: %YEAR%\n"+
+					"IMDB URL: %IMDB_URL%\n"+
+					"TVDB URL: %TVDB_URL%\n"+
+					"Score: %RATING%\n"+
+					"Rating: %CERTIFICATION%\n"+
+					"Runtime: %RUNTIME%\n"+
+					"Budget: %BUDGET%\n"+
+					"Revenue: %REVENUE%\n"+
+					"Studios: %FORMAT_STUDIOS%\n"+
+					"Genres: %FORMAT_GENRES%\n"+
+					"Homepage: %HOMEPAGE%\n";
 	}
+	for(var i in meta){
+		format = format.replace("%" + i.toUpperCase() + "%", meta[i]);
+	}
+	format = format.replace("%FORMAT_STUDIOS%", formatList(meta.studios));
+	format = format.replace("%FORMAT_GENRES%", formatList(meta.genres));
+	format = format.replace(/\n[^\n]+: (undefined|%[^\n]+%)?\n/g, "\n");
 	return format;
 }
 
@@ -807,8 +867,6 @@ function formatOutput(){
 					.replace("%FORMATTED_TITLE%", formatTitle())
 					.replace("%TITLE_COLOR%", (opts.type == "TV") ? "red" : "purple")
 					.replace("%POSTER_URL%", meta.poster)
-					.replace("%DB%", (opts.type == "TV") ? "TVDB" : "IMDB")
-					.replace("%DB_URL%", meta.db_url)
 					.replace("%PLOT%", formatPlot())
 					.replace("%INFO%", formatInfo())
 					.replace("%MEDIAINFO%", formatMediaInfo())
