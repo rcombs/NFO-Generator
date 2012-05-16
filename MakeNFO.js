@@ -555,7 +555,11 @@ function loadMediaInfo(){
 				if(err){
 					throw(err);
 				}else{
-					meta.mediaInfo = out.File;
+					var tracks = out.File.track;
+					for(var i = 0; i < tracks.length; i++){
+						tracks[i].type = tracks[i]["@"].type;
+					}
+					meta.mediaInfo = out.File.track;
 					takeScreenshots();
 				}
 			});
@@ -581,7 +585,7 @@ function durationToSeconds(str){
 function takeScreenshots(){
 	if(parsedOpts.snapshotCount > 0){
 		console.error("Taking snapshots...");
-		takeAndUploadScreenshots(opts.path, durationToSeconds(meta.mediaInfo.track[0].Duration), false, parsedOpts.snapshotCount, function(URLs, times){
+		takeAndUploadScreenshots(opts.path, durationToSeconds(meta.mediaInfo[0].Duration), false, parsedOpts.snapshotCount, function(URLs, times){
 			console.error("Finished taking screenshots.");
 			meta.screenshots = [];
 			for(var i = 0; i < URLs.length; i++){
@@ -627,8 +631,8 @@ function waitThenFormatOutput(){
 
 function getQuality(){
 	var vertical, horizontal;
-	for(var i = 0; i < meta.mediaInfo.track.length; i++){
-		var track = meta.mediaInfo.track[i];
+	for(var i = 0; i < meta.mediaInfo[0].length; i++){
+		var track = meta.mediaInfo[i];
 		if(track.type != "Video"){
 			continue;
 		}
@@ -655,11 +659,11 @@ function getQuality(){
 
 function getCodecs(){
 	var videoCodec, audioCodecs = [];
-	for(var i = 0; i < meta.mediaInfo.track.length; i++){
-		if(meta.mediaInfo.track[i].type == "Video"){
-			videoCodec = meta.mediaInfo.track[i].format;
-		}else if(meta.mediaInfo.track[i].type == "Audio"){
-			audioCodecs.push(meta.mediaInfo.track[i].format);
+	for(var i = 0; i < meta.mediaInfo.length; i++){
+		if(meta.mediaInfo[i].type == "Video"){
+			videoCodec = meta.mediaInfo[i].format;
+		}else if(meta.mediaInfo[i].type == "Audio"){
+			audioCodecs.push(meta.mediaInfo[i].format);
 		}
 	}
 	return videoCodec + (audioCodecs.length > 0 ? ((videoCodec ? (videoCodec + "/") : "") + audioCodecs.join("/")) : "");
@@ -697,7 +701,7 @@ function formatCast(){
 		return "";
 	}
 	var str = "[icon=cast2]\n";
-	var imageString = "[center]";
+	var imageString = "[center] ";
 	var imageCount = 0;
 	var imageMax = 3;
 	var count = 0;
@@ -705,21 +709,23 @@ function formatCast(){
 	var peopleStr = "";
 	for(var i = 0; i < meta.people.length; i++){
 		if(meta.people[i].job == "Actor"){
-			peopleStr += "[url=" + meta.people[i].url + "]" + meta.people[i].name + "[/url]: " + meta.people[i].character + "\n";
-			count++;
-			if(meta.people[i].profile && imageCount < imageMax){
-				imageString +=  "[url=" + meta.people[i].url + "][img]" + meta.people[i].profile + "[/img][/url]";
-				imageMax++;
+			if(count < max){
+				peopleStr += "[url=" + meta.people[i].url + "]" + meta.people[i].name + "[/url]: " + meta.people[i].character + "\n";
+				count++;
 			}
-		}
-		if(count >= max){
-			break;
+			if(meta.people[i].profile && imageCount < imageMax){
+				imageString +=  "[url=" + meta.people[i].url + "][img]" + meta.people[i].profile + "[/img][/url] ";
+				imageCount++;
+			}
+			if(count >= max && imageCount >= imageMax){
+				break;
+			}
 		}
 	}
 	if(imageCount > 0){
-		return str + peopleStr;
-	}else{
 		return str + imageString + "[/center]\n" + peopleStr;
+	}else{
+		return str + peopleStr;
 	}
 }
 
@@ -874,7 +880,7 @@ function takeScreenshot(path, time, size, callback){
 	if(isMac){
 		ffmpegPath = __dirname + "/deps/darwin/ffmpeg";
 	}
-	return child_process.exec('"' + ffmpegPath + '" -ss ' + time + ' -i "' + path + '" -ss ' + time + ' -vframes 1 -y' + size + ' -sameq -vcodec png -f image2 -', {
+	return child_process.exec('"' + ffmpegPath + '" -ss ' + time + ' -i "' + path + '" -vframes 1 -y' + size + ' -sameq -vcodec png -f image2 -', {
 		maxBuffer: 1000000000*1024,
 		encoding: "binary"
 	}, function(error, data) {
