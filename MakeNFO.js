@@ -874,7 +874,7 @@ function takeScreenshot(path, time, size, callback){
 	if(isMac){
 		ffmpegPath = __dirname + "/deps/darwin/ffmpeg";
 	}
-	return child_process.exec('"' + ffmpegPath + '" -i "' + path + '" -ss ' + time + ' -vframes 1 -y' + size + ' -sameq -vcodec png -f image2 -', {
+	return child_process.exec('"' + ffmpegPath + '" -ss ' + time + ' -i "' + path + '" -vframes 1 -y' + size + ' -sameq -vcodec png -f image2 -', {
 		maxBuffer: 1000000000*1024,
 		encoding: "binary"
 	}, function(error, data) {
@@ -939,7 +939,8 @@ function takeAndUploadScreenshots(path, duration, size, count, callback, progres
 	var screenshotURLs = [];
 	var start = 0, increment = duration/count | 0, end = increment;
 	var timecodes = [];
-	for(var i = 0; i < count; i++){
+	var i = 0;
+	function take(){
 		var timecode = secondsToHHMMSS(getRandomInt(start, end));
 		timecodes.push(timecode);
 		takeAndUploadScreenshot(path, timecode, false, function(URL){
@@ -949,9 +950,12 @@ function takeAndUploadScreenshots(path, duration, size, count, callback, progres
 			}
 			if(screenshotURLs.length == count){
 				callback(screenshotURLs, timecodes);
+			}else{
+				take();
 			}
 		});
 		start = end;
 		end += increment;
 	}
+	take();
 }
