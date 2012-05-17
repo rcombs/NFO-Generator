@@ -505,6 +505,13 @@ function askWhichMovie(movies){
 function searchTVDB(){
 	// Load MediaInfo and take screenshots while other stuff happens
 	loadMediaInfo();
+	if(opts.id){
+	
+	}else if(opts.seriesID){
+		
+	}else{
+		
+	}
 }
 
 // Search TMDB for a movie
@@ -701,8 +708,8 @@ function formatTitle(){
 }
 
 function formatMediaInfo(){
-	var colors = ["yellow", "blue", "green", "orange", "red"];
-	var out = "[icon=details2]";
+	var colors = ["purple", "blue", "green", "orange", "red"];
+	var out = "[icon=info2]";
 	for(var i = 0; i < mediaInfo.length; i++){
 		var track = mediaInfo[i];
 		var color = colors[i%5];
@@ -803,7 +810,7 @@ function formatInfo(){
 	if(opts.formats.infoFormat){
 		format = opts.formats.infoFormat;
 	}else{
-		format = 	"[icon=info2]\n"+
+		format = 	"[icon=details2]\n"+
 					"Title: %TITLE%\n"+
 					"Year: %YEAR%\n"+
 					"IMDB URL: %IMDB_URL%\n"+
@@ -822,7 +829,7 @@ function formatInfo(){
 	}
 	format = format.replace("%FORMAT_STUDIOS%", formatList(meta.studios));
 	format = format.replace("%FORMAT_GENRES%", formatList(meta.genres));
-	format = format.replace(/\n[^\n]+: (undefined|%[^\n]+%)?\n/g, "\n");
+	format = format.replace(/\n[^\n]+: (undefined|%[^\n]+%|0)?\n/g, "\n");
 	return format;
 }
 
