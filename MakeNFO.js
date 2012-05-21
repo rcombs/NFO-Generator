@@ -10,16 +10,29 @@ var http = require("http"),
 	request = require("request"),
 	mime = require("mime"),
 	nomnom = require("nomnom"),
-	xml2js = require("xml2js");
+	xml2js = require("xml2js"),
+	gunzip = require('zlib').gunzip;
 	
 // API keys and URL paths
-var	TVDB_API_KEY = "88445D4B8F5F27A3",
+var	TVDB_API_KEY = "../data",
 	TMDB_API_KEY = "5261508c7eb4c0ea4a7c335c8d8e2074",
 	TVDB_API_PATH = "http://www.thetvdb.com/api/",
 	TMDB_API_PATH = "http://api.themoviedb.org/2.1/%method%/%lang%/%type%/%key%/%arg%",
 	LANGUAGE = "en";
 	
 var parser = new xml2js.Parser();
+	
+function setTitle(title){
+	if(!opts.noInput){
+		if(!isWin){
+			process.stdout.write("\033]0;" + title + "\007");
+		}
+	}
+}
+
+process.on("exit", function(){
+	setTitle("");
+});
 	
 // Helper functions for TMDB and TVDB
 function TMDBRequest(method, arg, callback, i){
@@ -43,17 +56,25 @@ function TMDBRequest(method, arg, callback, i){
 			}
 			callback(null, out);
 		}
-	});
-}
+	});}
 function TVDBStaticRequest(path, callback){
-	var url = TVDB_API_PATH + TVDBAPI_KEY + path;
+	var url = TVDB_API_PATH + TVDB_API_KEY + path;
 	request({url: url}, function(error, response, body){
 		if(error){
 			callback(error, null);
 		}else{
-			parser.parseString(body, function(err, data){
-				callback(err, data);
-			});
+			function parse(err, body){
+				body = body.toString('utf-8');
+				parser.parseString(body, function(err, data){
+					callback(err, data);
+				});
+			}
+			var encoding = response.headers['content-encoding'];
+			if(encoding && encoding.indexOf('gzip') >= 0) {
+				gunzip(body, parse);
+			}else{
+				parse(null, body);
+			}
 		}
 	});
 }
@@ -63,6 +84,11 @@ function TVDBDynamicRequest(inf, args, callback){
 		if(error){
 			callback(error, null);
 		}else{
+			var encoding = response.headers['content-encoding'];
+			if(encoding && encoding.indexOf('gzip') >= 0) {
+					body = uncompress(body);
+			}
+			body = body.toString('utf-8');
 			parser.parseString(body, function(err, data){
 				callback(err, data);
 			});
@@ -92,7 +118,7 @@ var parsedOpts = nomnom
 		.options({
 			path: {
 				position: 0,
-				help: "File to generate an NFO for",
+				help: "File to generate an NFO for.",
 				list: false,
 				required: true
 			},
@@ -106,27 +132,27 @@ var parsedOpts = nomnom
 				abbr: "N",
 				full: "no-guess",
 				flag: true,
-				help: "Don't try to guess; ask about everything"
+				help: "Don't try to guess; ask about everything."
 			},
 			noInput: {
 				abbr: "u",
 				full: "no-ui",
 				flag: true,
-				help: "Don't ask about things; bug out if something can't be guessed"
+				help: "Don't ask about things; bug out if something can't be guessed."
 			},
 			type: {
 				abbr: "t",
-				help: "Type of video (either Movie or TV)",
+				help: "Type of video (either Movie or TV).",
 				choices: ["TV", "Movie"],
 				required: false
 			},
 			name: {
 				abbr: "n",
-				help: "Name of the movie or TV show to search for"
+				help: "Name of the movie or TV show to search for."
 			},
 			year: {
 				abbr: "y",
-				help: "Original release year of the video"
+				help: "Original release year of the video."
 			},
 			source: {
 				abbr: "s",
@@ -135,17 +161,17 @@ var parsedOpts = nomnom
 			},
 			user: {
 				abbr: "u",
-				help: "Username to add to the title (OPTIONAL)",
+				help: "Username to add to the title (OPTIONAL).",
 				default: ""
 			},
 			id: {
 				abbr: "i",
-				help: "IMDB movie or TheTVDB episode ID (including tt if it's an IMDB ID)"
+				help: "IMDB movie/series or TheTVDB series ID (including tt if it's an IMDB ID)."
 			},
-			seriesID: {
-				full: "series-id",
+			episodeID: {
+				full: "episode-id",
 				abbr: "I",
-				help: "TheTVDB series ID"
+				help: "TheTVDB episode ID."
 			},
 			episode: {
 				abbr: "e",
@@ -155,16 +181,15 @@ var parsedOpts = nomnom
 				abbr: "c",
 				default: 4,
 				full: "snapshot-count",
-				help: "Number of snapshots to take of the video file (uploaded to Lookpic)"
+				help: "Number of snapshots to take of the video file (uploaded to Lookpic)."
 			},
 			signature: {
 				default: "",
-				help: "Signature to use at the end of the edit",
-				default: ""
+				help: "Signature to use at the end of the edit."
 			},
 			sourceMedia: {
 				full: "source-media",
-				help: "Source media type to show in the title (e.g. DVDRip, HDTVRip, WEB-DL)",
+				help: "Source media type to show in the title (e.g. DVDRip, HDTVRip, WEB-DL).",
 				default: ""
 			},
 			maxCastMembers: {
@@ -172,6 +197,13 @@ var parsedOpts = nomnom
 				help: "Maximum number of cast members to show in the output (default 10; 0 removes cast section).",
 				default: 10
 			},
+			dvdSort: {
+				full: "dvd-order",
+				abbr: "d",
+				help: "Use DVD ordering instead of aired ordering for episode numbers on TVDB.",
+				default: false,
+				flag: true
+			}
 		})
 		.parse();
 
@@ -209,10 +241,15 @@ if(!path.existsSync(opts.path)){
 // Set the output file to <mediafilename>.nfo if it's not given.
 opts.output = parsedOpts.output || path.dirname(opts.path) + "/" + path.basename(opts.path, path.extname(opts.path)) + ".nfo";
 
+// Set noInput
+opts.noInput = parsedOpts.noInput;
+
 // Create the file write stream. If the output path is "-", use stdout. Otherwise, write to the filesystem.
 var outStream;
 if(opts.output == "-"){
 	outStream = process.stdout;
+	// Override noInput if writing to stdout.
+	opts.noInput = true;
 }else{
 	outStream = fs.createWriteStream(opts.output, {mode: 0644});
 	outStream.on("error", function(error){
@@ -223,6 +260,8 @@ if(opts.output == "-"){
 		}
 	});
 }
+
+setTitle("NFOMaker");
 
 // Get the file's basename, remove the extension, and replace "." with " "
 var basename = path.basename(opts.path, path.extname(opts.path)).replace(/\./g, " ");
@@ -239,15 +278,15 @@ function close(){
 	outStream.end();
 }
 
-// If a TVDB ID was provided, use it!
-if(parsedOpts.id && parsedOpts.id.indexOf("tt") != 0){
-	opts.id = parsedOpts.id;
+if(parsedOpts.episodeID){
+	// If a TVDB episode ID was provided, use it!
 	opts.type = TV;
+	opts.episodeID = parsedOpts.episodeID;
 	searchTVDB();
-}else if(parsedOpts.seriesID){
+}else if(parsedOpts.id && parsedOpts.id.indexOf("tt") != 0){
 	// Series IDs are the next-best thing. Use them, then guess the episode number.
 	opts.type = TV;
-	opts.seriesID = parsedOpts.seriesID;
+	opts.id = parsedOpts.id;
 	getEpisode();
 }else if(parsedOpts.type){
 	// No TVDB ID, but at least we have a media type. Moving on!
@@ -260,6 +299,7 @@ if(parsedOpts.id && parsedOpts.id.indexOf("tt") != 0){
 	}
 	// If we have an IMDB ID, use it now.
 	if(parsedOpts.id && parsedOpts.id.indexOf("tt") == 0){
+		opts.id = parsedOpts.id;
 		if(opts.type == TV){
 			searchTVDB();
 		}else{
@@ -272,7 +312,7 @@ if(parsedOpts.id && parsedOpts.id.indexOf("tt") != 0){
 }else{
 	// If the type isn't specified, guess with a regex; if that fails, ask the user.
 	if(parsedOpts.noGuess){
-		if(parsedOpts.noInput){
+		if(opts.noInput){
 			errorDie("Can't guess the media type, and input isn't allowed!");
 		}else{
 			var ask = function(){
@@ -313,7 +353,7 @@ if(parsedOpts.id && parsedOpts.id.indexOf("tt") != 0){
 // Guess the name of a TV show or movie based on its filename (RISKY!).
 // Return false if we can't guess.
 function guessName(name, type){
-	if(type == "TV"){
+	if(type == TV){
 		// Match everything before the episode number
 		return basename.substring(0, basename.search(TVTitleRegex));
 	}else{
@@ -332,7 +372,7 @@ function getName(){
 	if(parsedOpts.name){
 		// Name was provided; move on!
 		opts.name = parsedOpts.name;
-		if(opts.type == "TV"){
+		if(opts.type == TV){
 			getEpisode();
 		}else{
 			getYear();
@@ -346,7 +386,7 @@ function getName(){
 					ask();
 				}else{
 					opts.name = name;
-					if(opts.type == "TV"){
+					if(opts.type == TV){
 						getEpisode();
 					}else{
 						getYear();
@@ -356,7 +396,7 @@ function getName(){
 		}
 		if(parsedOpts.noGuess){
 			// Guessing isn't allowed...
-			if(parsedOpts.noInput){
+			if(opts.noInput){
 				// You dumbass.
 				errorDie("Can't guess the media name, and input isn't allowed!");
 			}else{
@@ -368,13 +408,13 @@ function getName(){
 			var guess = guessName(basename, opts.type);
 			if(guess){
 				opts.name = guess;
-				if(opts.type == "TV"){
+				if(opts.type == TV){
 					getEpisode();
 				}else{
 					getYear();
 				}
 			}else{
-				if(parsedOpts.noInput){
+				if(opts.noInput){
 					errorDie("Can't guess the media name, and input isn't allowed!");
 				}else{
 					// Ask the user if possible.
@@ -422,7 +462,7 @@ function getEpisode(){
 			opts.episode = parseInt(numbers[0], 10);
 			searchTVDB();
 		}else{
-			if(parsedOpts.noInput){
+			if(opts.noInput){
 				errorDie("Can't parse episode and input isn't allowed!");
 			}else{
 				console.error("Please enter a valid episode number.");
@@ -433,7 +473,7 @@ function getEpisode(){
 	if(parsedOpts.episode){
 		parseEpisode(" " + parsedOpts.episode);
 	}else if(parsedOpts.noGuess){
-		if(parsedOpts.noInput){
+		if(opts.noInput){
 			errorDie("Can't guess episode and input isn't allowed!");
 		}else{
 			ask();
@@ -463,10 +503,13 @@ function parseMovie(movie){
 	meta.imdb_url = "http://imdb.com/title/" + movie.imdb_id;
 	meta.plot = movie.overview;
 	meta.score = movie.rating;
-	meta.rating = movie.certification;
+	meta.certification = movie.certification;
 	meta.runtime = movie.runtime;
 	meta.genres = movie.genres;
 	meta.year = movie.released.split("-")[0];
+	if(!meta.year){
+		meta.year = "";
+	}
 	meta.tagline = movie.tagline;
 	meta.budget = movie.budget;
 	meta.revenue = movie.revenue;
@@ -502,16 +545,204 @@ function askWhichMovie(movies){
 	ask();
 }
 
+function parseTVDBList(list){
+	if(!list){
+		return "";
+	}
+	var arr = list.split("|");
+	arr = arr.splice(1, arr.length - 2);
+	return arr.join(", ");
+}
+
+function parseTVDBBanners(banners, season){
+	for(var i = 0; i < banners.length; i++){
+		if(banners[i].BannerType2 == "seasonwide" && banners[i].Season == season){
+			return "http://thetvdb.com/banners/" + banners[i].BannerPath;
+		}
+	}
+	for(var i = 0; i < banners.length; i++){
+		if(banners[i].BannerType2 == "graphical"){
+			return "http://thetvdb.com/banners/" + banners[i].BannerPath;
+		}
+	}
+}
+
+function parseTVDBData(series, actors, banners, episode){
+	if(series.Airs_DayOfWeek){
+		meta.airs = series.Airs_DayOfWeek + (series.Airs_Time ? (" at " + series.Airs_Time) : "");
+	}
+	meta.series_first_aired = series.FirstAired;
+	meta.year = series.FirstAired.split("-")[0];
+	if(!meta.year){
+		meta.year = "";
+	}
+	meta.episode_first_aired = episode.FirstAired;
+	if(episode.IMDB_ID){
+		meta.imdb_url = "http://www.imdb.com/title/" + series.IMDB_ID + "/";
+	}
+	meta.tvdb_url = "http://thetvdb.com/?tab=episode&seriesid=" + episode.seriesid + "&seasonid=" + episode.seasonid + "&id=" + episode.id + "&lid=7";
+	if(series.IMDB_ID){
+		meta.series_imdb_url = "http://www.imdb.com/title/" + episode.IMDB_ID + "/";
+	}
+	meta.series_tvdb_url = "http://thetvdb.com/?tab=series&id=" + episode.seriesid + "&lid=7";
+	meta.network = series.Network;
+	meta.series_plot = series.Overview;
+	meta.episode_plot = episode.Overview;
+	meta.series_score = series.Rating;
+	meta.score = episode.Rating;
+	meta.certification = series.ContentRating;
+	if(episode.EpisodeNumber && typeof episode.EpisodeNumber !== "object" && episode.SeasonNumber !== ""){
+		if(episode.SeasonNumber == "0"){
+			meta.episode = "Special #" + episode.EpisodeNumber;
+			meta.aired_episode = "Special #" + episode.EpisodeNumber;
+		}else{
+			meta.episode = "S" + pad(episode.SeasonNumber, 2) + "E" + pad(episode.EpisodeNumber, 2);
+			meta.aired_episode = "S" + pad(episode.SeasonNumber, 2) + "E" + pad(episode.EpisodeNumber, 2);
+		}
+	}
+	if(episode.DVD_season !== "" && typeof episode.DVD_season !== "object" && episode.DVD_episodenumber){
+		if(episode.DVD_season === "0"){
+			if(!meta.episode || opts.DVDSort){
+				meta.episode = "Special #" + episode.DVD_episodenumber;
+			}
+			meta.dvd_episode = "Special #" + episode.DVD_episodenumber;
+		}else{
+			if(!meta.episode || opts.DVDSort){
+				meta.episode = "S" + pad(episode.DVD_season, 2) + "E" + pad(episode.DVD_episodenumber, 2);
+			}
+			meta.dvd_episode = "S" + pad(episode.DVD_season, 2) + "E" + pad(episode.DVD_episodenumber, 2);
+		}
+	}
+	meta.genres = parseTVDBList(series.Genre);
+	meta.runtime = series.Runtime;
+	meta.title = series.SeriesName;
+	meta.status = series.Status;
+	meta.guest_stars = parseTVDBList(episode.GuestStars);
+	meta.director = parseTVDBList(series.Director);
+	meta.writer = parseTVDBList(series.Writer);
+	meta.episode_name = episode.EpisodeName;
+	meta.poster = parseTVDBBanners(banners, episode.SeasonNumber);
+	meta.people = actors;
+	if(waitCalled){
+		formatOutput();
+	}
+}
+
+function requestSeries(seriesID){
+	TVDBStaticRequest("/series/" + seriesID + "/" + LANGUAGE + ".xml",  function(err, record){
+		if(err){
+			throw(err);
+		}
+		var series = record.Series;
+		// DECIDE ABSOLUTE OR NORMAL; DEFAULT OR DVD SORTING
+		var url;
+		if(opts.season == ABSOLUTE){
+			url = "/series/" + seriesID + "/absolute/" + opts.episode + "/" + LANGUAGE + ".xml";
+		}else{
+			url = "/series/" + seriesID + "/" + (parsedOpts.dvdSort ? "dvd" : "default") + "/" + opts.season + "/" + opts.episode + "/" + LANGUAGE + ".xml";
+		}
+		TVDBStaticRequest(url, function(err, record){
+			if(err){
+				throw(err);
+			}
+			var episode = record.Episode;
+			TVDBStaticRequest("/series/" + seriesID + "/banners.xml", function(err, record){
+				if(err){
+					throw(err);
+				}
+				var banners = record.Banner;
+				TVDBStaticRequest("/series/" + seriesID + "/actors.xml", function(err, record){
+					if(err){
+						throw(err);
+					}
+					var actors = record.Actor;
+					parseTVDBData(series, actors, banners, episode);
+				});
+			});
+		});
+	});
+}
+
 function searchTVDB(){
 	// Load MediaInfo and take screenshots while other stuff happens
 	loadMediaInfo();
 	if(opts.id){
-	
-	}else if(opts.seriesID){
-		
+		if(opts.id.indexOf("tt") == 0){
+			TVDBDynamicRequest("GetSeriesByRemoteID", {imdbid: opts.id}, function(err, record){
+				requestSeries(record.Series.seriesid);
+			});
+		}else{
+			requestSeries(opts.id);
+		}
+	}else if(opts.episodeID){
+		TVDBStaticRequest("/episodes/" + opts.episodeID + "/" + LANGUAGE + ".xml", function(err, record){
+			if(err){
+				throw(err);
+			}
+			var episode = record.Episode;
+			TVDBStaticRequest("/series/" + episode.seriesid + "/" + LANGUAGE + ".xml", function(err, record){
+				if(err){
+					throw(err);
+				}
+				var series = record.Series;
+				TVDBStaticRequest("/series/" + episode.seriesid + "/banners.xml", function(err, record){
+					if(err){
+						throw(err);
+					}
+					var banners = record.Banner;
+					TVDBStaticRequest("/series/" + episode.seriesid + "/actors.xml", function(err, record){
+						if(err){
+							throw(err);
+						}
+						var actors = record.Actor;
+						parseTVDBData(series, actors, banners, episode);
+					});
+				});
+			});
+		});
 	}else{
-		
+		TVDBDynamicRequest("GetSeries", {seriesname: opts.name, language: LANGUAGE}, function(err, record){
+			if(err){
+				throw(err);
+			}
+			if(Array.isArray(record.Series)){
+				// If there are multiple TV matches, either guess or ask.
+				if(opts.noInput){
+					if(parsedOpts.noGuess){
+						// If no guessing, die
+						errorDie("No guessing allowed, and no input allowed!");
+					}else{
+						requestSeries(record[0].Series.seriesid);
+					}
+				}else{
+					askWhichShow(record.Series);
+				}
+			}else{
+				requestSeries(record.Series.seriesid);
+			}
+		});
 	}
+}
+
+// Ask which of an array of shows is correct.
+function askWhichShow(shows){
+	shows = shows.splice(0, 5);
+	var str = "Search returned multiple shows; listing first " + shows.length + ":\n";
+	for(var i = 0; i < shows.length; i++){
+		str += "[" + i + "] " + shows[i].SeriesName + (shows[i].FirstAired ? " (" + shows[i].FirstAired + "):" : "") + " " + shows[i].Overview + "\n";
+	}
+	str += "Which one of the above shows is correct? [0]: ";
+	function ask(){
+		rl.question(str, function(str){
+			var num = parseInt(str, 10);
+			if(shows[num]){
+				requestSeries(shows[num].id);
+			}else{
+				requestSeries(shows[0].id);
+			}
+		});
+	}
+	ask();
 }
 
 // Search TMDB for a movie
@@ -528,7 +759,7 @@ function searchTMDB(){
 				loadMovie(data[0].id);
 			}else{
 				// If there are multiple movie matches, either guess or ask.
-				if(parsedOpts.noInput){
+				if(opts.noInput){
 					if(parsedOpts.noGuess){
 						// If no guessing, die
 						errorDie("No guessing allowed, and no input allowed!");
@@ -645,7 +876,7 @@ function waitThenFormatOutput(){
 
 function getQuality(){
 	var vertical, horizontal;
-	for(var i = 0; i < mediaInfo[0].length; i++){
+	for(var i = 0; i < mediaInfo.length; i++){
 		var track = mediaInfo[i];
 		if(track.type != "Video"){
 			continue;
@@ -690,17 +921,21 @@ function formatTitle(){
 	if(opts.titleFormat){
 		format = opts.titleFormat;
 	}else{
-		format = "%TITLE% (%YEAR%) - %QUALITY% - %CODECS% - %SOURCEMEDIA% - %SOURCE% - %USER%";
+		format = "%TITLE% (%YEAR%) %EPISODE% - %EPISODE_NAME% - %QUALITY% - %CODECS% - %SOURCEMEDIA% - %SOURCE% - %USER%";
 	}
 	var title = format
 		.replace("%TITLE%", meta.title)
+		.replace(" ("+meta.year+")", "")
 		.replace("%YEAR%", meta.year)
+		.replace("%EPISODE%", meta.episode)
+		.replace("%EPISODE_NAME%", meta.episode_name)
 		.replace("%QUALITY%", getQuality())
 		.replace("%SOURCEMEDIA%", opts.sourceMedia)
 		.replace("%CODECS%", getCodecs())
 		.replace("%SOURCE%", parsedOpts.source)
 		.replace("%USER%", parsedOpts.user)
 		.replace(/  +/g, " ")
+		.replace(/ undefined /g, " ")
 		.replace(/-(?: -)+/g, "-")
 		.replace(/ ?\(\)/g, " ")
 		.replace(/ ?-? $/,"");
@@ -738,13 +973,19 @@ function formatCast(){
 	var max = parsedOpts.maxCastMembers;
 	var peopleStr = "";
 	for(var i = 0; i < meta.people.length; i++){
+		if(meta.people[i].Image){
+			meta.people[i].profile = "http://thetvdb.com/banners/" + meta.people[i].Image;
+			meta.people[i].name = meta.people[i].Name;
+			meta.people[i].character = meta.people[i].Role;
+			meta.people[i].job = "Actor";
+		}
 		if(meta.people[i].job == "Actor"){
 			if(count < max){
-				peopleStr += "[url=" + meta.people[i].url + "]" + meta.people[i].name + "[/url]: " + meta.people[i].character + "\n";
+				peopleStr += (meta.people[i].url ? "[url=" + meta.people[i].url + "]" : "") + meta.people[i].name + (meta.people[i].url ? "[/url]: " : ": ") + meta.people[i].character + "\n";
 				count++;
 			}
 			if(meta.people[i].profile && imageCount < imageMax){
-				imageString +=  "[url=" + meta.people[i].url + "][img]" + meta.people[i].profile + "[/img][/url] ";
+				imageString +=  (meta.people[i].url ? "[url=" + meta.people[i].url + "]" : "") + "[img]" + meta.people[i].profile + "[/img]" + (meta.people[i].url ?  + "[/url] " : " ");
 				imageCount++;
 			}
 			if(count >= max && imageCount >= imageMax){
@@ -787,22 +1028,28 @@ function formatNote(){
 }
 
 function formatList(list){
+	if(!list){
+		return;
+	}
+	if(typeof list == "string"){
+		return list;
+	}
 	var str = "";
 	for(var i = 0; i < list.length; i++){
-		if(list[i].url){
-			str += "[url=" + list[i].url + "]" + list[i].name + "[/url]";
+		if(typeof list[i] == "string"){
+			str += list[i];
 		}else{
-			str += list.name;
+			if(list[i].url){
+				str += "[url=" + list[i].url + "]" + list[i].name + "[/url]";
+			}else{
+				str += list.name;
+			}
 		}
 		if(i < list.length - 1){
 			str += ", ";
 		}
 	}
 	return str;
-}
-
-function formatGenres(){
-	
 }
 
 function formatInfo(){
@@ -813,15 +1060,29 @@ function formatInfo(){
 		format = 	"[icon=details2]\n"+
 					"Title: %TITLE%\n"+
 					"Year: %YEAR%\n"+
+					"Aired Episode: %AIRED_EPISODE%\n"+
+					"DVD Episode: %DVD_EPISODE%\n"+
+					"Episode Title: %EPISODE_TITLE%\n"+
+					"Runtime: %RUNTIME% minutes\n"+
+					"First Aired: %EPISODE_FIRST_AIRED%\n"+
 					"IMDB URL: %IMDB_URL%\n"+
 					"TVDB URL: %TVDB_URL%\n"+
-					"Score: %RATING%\n"+
-					"Rating: %CERTIFICATION%\n"+
-					"Runtime: %RUNTIME%\n"+
-					"Budget: %BUDGET%\n"+
-					"Revenue: %REVENUE%\n"+
+					"Score: %SCORE%\n"+
+					"Budget: $%BUDGET%\n"+
+					"Revenue: $%REVENUE%\n"+
 					"Studios: %FORMAT_STUDIOS%\n"+
+					"Network: %NETWORK%\n"+
+					"Writer(s): %WRITER%\n"+
+					"Director(s): %DIRECTOR%\n"+
+					"Guest Stars: %GUEST_STARS%\n"+
 					"Genres: %FORMAT_GENRES%\n"+
+					"Series TVDB URL: %SERIES_TVDB_URL%\n"+
+					"Series IMDB URL: %SERIES_IMDB_URL%\n"+
+					"Series Score: %SERIES_SCORE%\n"+
+					"Series First Aired: %SERIES_FIRST_AIRED%\n"+
+					"Series Status: %STATUS%\n"+
+					"Series Certification: %CERTIFICATION%\n"+
+					"Series Airtime: %AIRS%\n"
 					"Homepage: %HOMEPAGE%\n";
 	}
 	for(var i in meta){
@@ -829,7 +1090,10 @@ function formatInfo(){
 	}
 	format = format.replace("%FORMAT_STUDIOS%", formatList(meta.studios));
 	format = format.replace("%FORMAT_GENRES%", formatList(meta.genres));
-	format = format.replace(/\n[^\n]+: (undefined|%[^\n]+%|0)?\n/g, "\n");
+	var removeRegex = /\n[^\n]+: \$?(?:undefined|(?:%[A-Z_]+%)|0|0? minutes)?\n/gi
+	while(format.match(removeRegex)){
+		format = format.replace(removeRegex, "\n");
+	}
 	return format;
 }
 
@@ -843,7 +1107,13 @@ function formatTrailer(){
 }
 
 function formatPlot(){
-	return "[icon=plot2]\n" + meta.plot;
+	if(opts.type == TV){
+		return  "[icon=plot2]\n" +
+				"Series plot: " + meta.series_plot + "\n" +
+				"Episode plot: " + meta.episode_plot;
+	}else{
+		return "[icon=plot2]\n" + meta.plot;
+	}
 }
 
 function writeOutput(data){
@@ -861,18 +1131,18 @@ function formatOutput(){
 					"[center][title=%TITLE_COLOR%]%FORMATTED_TITLE%[/title][/center]\n" + 
 					"[b]\n" + 
 					"%INFO%" + 
+					"%MEDIAINFO%\n" + 
+					"%CAST%\n" + 
 					"%PLOT%\n" + 
-					"%MEDIAINFO%\n" +
-					"%CAST%\n" +
-					"%TRAILER%\n" +
-					"%SCREENS%\n" +
-					"%NOTE%\n" +
+					"%SCREENS%\n" + 
+					"%TRAILER%\n" + 
+					"%NOTE%\n" + 
 					"[/b]\n" + 
 					"%SIGNATURE%";
 	}
 	var output = outFormat
 					.replace("%FORMATTED_TITLE%", formatTitle())
-					.replace("%TITLE_COLOR%", (opts.type == "TV") ? "red" : "purple")
+					.replace("%TITLE_COLOR%", (opts.type == TV) ? "red" : "purple")
 					.replace("%POSTER_URL%", meta.poster)
 					.replace("%PLOT%", formatPlot())
 					.replace("%INFO%", formatInfo())
@@ -981,7 +1251,12 @@ function getRandomInt (min, max) {
 
 // Pads a number to 2 digits (for H:M:S)
 function pad(number, len){
-	var str = number.toString(10);
+	var str;
+	if(typeof number == "number"){
+		str = number.toString(10);
+	}else{
+		str = number;
+	}
 	while(str.length < len){
 		str = "0" + str;
 	}
