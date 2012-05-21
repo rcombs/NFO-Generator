@@ -546,7 +546,7 @@ function askWhichMovie(movies){
 }
 
 function parseTVDBList(list){
-	if(!list){
+	if(!list || typeof list != "string"){
 		return "";
 	}
 	var arr = list.split("|");
@@ -554,15 +554,17 @@ function parseTVDBList(list){
 	return arr.join(", ");
 }
 
-function parseTVDBBanners(banners, season){
+function parseTVDBBanners(banners, season, callback){
 	for(var i = 0; i < banners.length; i++){
 		if(banners[i].BannerType2 == "seasonwide" && banners[i].Season == season){
-			return "http://thetvdb.com/banners/" + banners[i].BannerPath;
+			downloadAndReuploadImage("http://thetvdb.com/banners/" + banners[i].BannerPath, -1, callback);
+			return;
 		}
 	}
 	for(var i = 0; i < banners.length; i++){
 		if(banners[i].BannerType2 == "graphical"){
-			return "http://thetvdb.com/banners/" + banners[i].BannerPath;
+			downloadAndReuploadImage("http://thetvdb.com/banners/" + banners[i].BannerPath, -1, callback);
+			return;
 		}
 	}
 }
@@ -621,11 +623,13 @@ function parseTVDBData(series, actors, banners, episode){
 	meta.director = parseTVDBList(series.Director);
 	meta.writer = parseTVDBList(series.Writer);
 	meta.episode_name = episode.EpisodeName;
-	meta.poster = parseTVDBBanners(banners, episode.SeasonNumber);
 	meta.people = actors;
-	if(waitCalled){
-		formatOutput();
-	}
+	parseTVDBBanners(banners, episode.SeasonNumber, function(poster){
+		meta.poster = poster;
+		if(waitCalled){
+			formatOutput();
+		}
+	});
 }
 
 function requestSeries(seriesID){
@@ -974,14 +978,18 @@ function formatCast(){
 	var peopleStr = "";
 	for(var i = 0; i < meta.people.length; i++){
 		if(meta.people[i].Image){
-			meta.people[i].profile = "http://thetvdb.com/banners/" + meta.people[i].Image;
+			// Later, possibly download and reupload actor images...
+			meta.people[i].profile = false; //"http://thetvdb.com/banners/" + meta.people[i].Image;
 			meta.people[i].name = meta.people[i].Name;
 			meta.people[i].character = meta.people[i].Role;
 			meta.people[i].job = "Actor";
 		}
+		if(typeof meta.people[i].character != "string"){
+			meta.people[i].character = "";
+		}
 		if(meta.people[i].job == "Actor"){
 			if(count < max){
-				peopleStr += (meta.people[i].url ? "[url=" + meta.people[i].url + "]" : "") + meta.people[i].name + (meta.people[i].url ? "[/url]: " : ": ") + meta.people[i].character + "\n";
+				peopleStr += (meta.people[i].url ? "[url=" + meta.people[i].url + "]" : "") + meta.people[i].name + (meta.people[i].url ? "[/url]: " : (meta.people[i].character ? ": " : "")) + meta.people[i].character + "\n";
 				count++;
 			}
 			if(meta.people[i].profile && imageCount < imageMax){
@@ -1156,6 +1164,16 @@ function formatOutput(){
 	close();
 }
 
+function downloadAndReuploadImage(url, resize, callback){
+	request({url: url, encoding: "binary"}, function(err, res, body){
+		if(err){
+			throw(err);
+		}else{
+			uploadLookpic(body, res.headers["content-type"], resize, callback);
+		}
+	});
+}
+
 // Upload some data to Lookpic.
 /*
 	data: data to upload
@@ -1165,7 +1183,7 @@ function formatOutput(){
 */
 function uploadLookpic(data, type, resize, callback){
 	var multipart = [
-			{body: new Buffer(data, "binary"), "Content-Disposition": 'form-data; name="image"; filename="image.png"', "Content-Type": type},
+			{body: new Buffer(data, "binary"), "Content-Disposition": 'form-data; name="image"; filename="image.' + mime.extension(type) + '"', "Content-Type": type},
 			{body: "5000000", "Content-Disposition": 'form-data; name="MAX_FILE_SIZE"'},
 			{body: Math.max(resize, 0).toString(10), "Content-Disposition": 'form-data; name="resize"'},
 			{body: "Upload", "Content-Disposition": 'form-data; name="submit"'}
@@ -1187,7 +1205,11 @@ function uploadLookpic(data, type, resize, callback){
 		if(err){
 			throw(err);
 		}else{
-			callback(body.match(/\[IMG\](.*)\[\/IMG\]/i)[1].replace("/t2/", "/i2/"));
+			try{
+				callback(body.match(/\[IMG\](.*)\[\/IMG\]/i)[1].replace("/t2/", "/i2/"));
+			}catch(err){
+				throw(err);
+			}
 		}
 	});
 }
