@@ -993,7 +993,7 @@ function formatCast(){
 				count++;
 			}
 			if(meta.people[i].profile && imageCount < imageMax){
-				imageString +=  (meta.people[i].url ? "[url=" + meta.people[i].url + "]" : "") + "[img]" + meta.people[i].profile + "[/img]" + (meta.people[i].url ?  + "[/url] " : " ");
+				imageString +=  (meta.people[i].url ? "[url=" + meta.people[i].url + "]" : "") + "[img]" + meta.people[i].profile + "[/img]" + (meta.people[i].url ? "[/url] " : " ");
 				imageCount++;
 			}
 			if(count >= max && imageCount >= imageMax){
