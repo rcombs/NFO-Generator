@@ -579,12 +579,12 @@ function parseTVDBData(series, actors, banners, episode){
 		meta.year = "";
 	}
 	meta.episode_first_aired = episode.FirstAired;
-	if(episode.IMDB_ID){
-		meta.imdb_url = "http://www.imdb.com/title/" + series.IMDB_ID + "/";
+	if(typeof episode.IMDB_ID == "string"){
+		meta.imdb_url = "http://www.imdb.com/title/" + episode.IMDB_ID + "/";
 	}
 	meta.tvdb_url = "http://thetvdb.com/?tab=episode&seriesid=" + episode.seriesid + "&seasonid=" + episode.seasonid + "&id=" + episode.id + "&lid=7";
-	if(series.IMDB_ID){
-		meta.series_imdb_url = "http://www.imdb.com/title/" + episode.IMDB_ID + "/";
+	if(typeof series.IMDB_ID == "string"){
+		meta.series_imdb_url = "http://www.imdb.com/title/" + series.IMDB_ID + "/";
 	}
 	meta.series_tvdb_url = "http://thetvdb.com/?tab=series&id=" + episode.seriesid + "&lid=7";
 	meta.network = series.Network;
@@ -721,6 +721,8 @@ function searchTVDB(){
 				}else{
 					askWhichShow(record.Series);
 				}
+			}else if(!record.Series){
+				errorDie("No such series!");
 			}else{
 				requestSeries(record.Series.seriesid);
 			}
@@ -1117,8 +1119,8 @@ function formatTrailer(){
 function formatPlot(){
 	if(opts.type == TV){
 		return  "[icon=plot2]\n" +
-				"Series plot: " + meta.series_plot + "\n" +
-				"Episode plot: " + meta.episode_plot;
+				"[color=blue]Series plot[/color]: " + meta.series_plot + "\n" +
+				"[color=green]Episode plot[/color]: " + meta.episode_plot;
 	}else{
 		return "[icon=plot2]\n" + meta.plot;
 	}
