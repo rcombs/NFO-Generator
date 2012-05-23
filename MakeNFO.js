@@ -1062,6 +1062,29 @@ function formatList(list){
 	return str;
 }
 
+function formatLanguages(){
+	var audioLanguages = [], textLanguages = [];
+	for(var i = 0; i < mediaInfo.length; i++){
+		if(mediaInfo[i].type == "Audio"){
+			if(audioLanguages.indexOf(mediaInfo[i].Language) == -1){
+				audioLanguages.push(mediaInfo[i].Language);
+			}
+		}else if(mediaInfo[i].type == "Text"){
+			if(textLanguages.indexOf(mediaInfo[i].Language) == -1){
+				textLanguages.push(mediaInfo[i].Language);
+			}
+		}
+	}
+	var outStr = "";
+	if(audioLanguages.length > 0){
+		outStr += "[color=blue]" + audioLanguages.join(", ") + "[/color]\n";
+	}
+	if(textLanguages.length > 0){
+		outStr += "[color=green]" + textLanguages.join(", ") + "[/color]\n";
+	}
+	return outStr;
+}
+
 function formatInfo(){
 	var format = "";
 	if(opts.formats.infoFormat){
@@ -1092,14 +1115,16 @@ function formatInfo(){
 					"Series First Aired: %SERIES_FIRST_AIRED%\n"+
 					"Series Status: %STATUS%\n"+
 					"Series Certification: %CERTIFICATION%\n"+
-					"Series Airtime: %AIRS%\n"
-					"Homepage: %HOMEPAGE%\n";
+					"Series Airtime: %AIRS%\n"+
+					"Homepage: %HOMEPAGE%\n"+
+					"%FORMAT_LANGUAGES%";
 	}
 	for(var i in meta){
 		format = format.replace("%" + i.toUpperCase() + "%", meta[i]);
 	}
 	format = format.replace("%FORMAT_STUDIOS%", formatList(meta.studios));
 	format = format.replace("%FORMAT_GENRES%", formatList(meta.genres));
+	format = format.replace("%FORMAT_LANGUAGES%", formatLanguages());
 	var removeRegex = /\n[^\n]+: \$?(?:undefined|(?:%[A-Z_]+%)|0|0? minutes)?\n/gi
 	while(format.match(removeRegex)){
 		format = format.replace(removeRegex, "\n");
