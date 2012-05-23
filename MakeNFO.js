@@ -1077,10 +1077,10 @@ function formatLanguages(){
 	}
 	var outStr = "";
 	if(audioLanguages.length > 0){
-		outStr += "[color=blue]" + audioLanguages.join(", ") + "[/color]\n";
+		outStr += "Spoken Languages: [color=blue]" + audioLanguages.join(", ") + "[/color]\n";
 	}
 	if(textLanguages.length > 0){
-		outStr += "[color=green]" + textLanguages.join(", ") + "[/color]\n";
+		outStr += "Texted Languages: [color=green]" + textLanguages.join(", ") + "[/color]\n";
 	}
 	return outStr;
 }
