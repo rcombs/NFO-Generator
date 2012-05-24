@@ -14,9 +14,9 @@ var http = require("http"),
 	gunzip = require('zlib').gunzip;
 	
 // API keys and URL paths
-var	TVDB_API_KEY = "../data",
+var	TVDB_API_KEY = "88445D4B8F5F27A3",
 	TMDB_API_KEY = "5261508c7eb4c0ea4a7c335c8d8e2074",
-	TVDB_API_PATH = "http://www.thetvdb.com/api/",
+	TVDB_API_PATH = "http://www.thetvdb.com/",
 	TMDB_API_PATH = "http://api.themoviedb.org/2.1/%method%/%lang%/%type%/%key%/%arg%",
 	LANGUAGE = "en";
 	
@@ -58,7 +58,7 @@ function TMDBRequest(method, arg, callback, i){
 		}
 	});}
 function TVDBStaticRequest(path, callback){
-	var url = TVDB_API_PATH + TVDB_API_KEY + path;
+	var url = TVDB_API_PATH + "data/" + path;
 	request({url: url}, function(error, response, body){
 		if(error){
 			callback(error, null);
@@ -79,7 +79,8 @@ function TVDBStaticRequest(path, callback){
 	});
 }
 function TVDBDynamicRequest(inf, args, callback){
-	var url = TVDB_API_PATH + inf + ".php?" + querystring.stringify(args);
+	args.apikey = TVDB_API_KEY;
+	var url = TVDB_API_PATH + "api/" + inf + ".php?" + querystring.stringify(args);
 	request({url: url}, function(error, response, body){
 		if(error){
 			callback(error, null);
@@ -104,10 +105,11 @@ var isMac = process.platform === 'darwin';
 // Set some constants
 var MOVIE = "M",
 	TV = "T",
-	ABSOLUTE = "A";
+	ABSOLUTE = "A",
+	DATE = "D";
 
 // Set up the regex for matching TV shows.
-var TVTitleRegex = /(?:\s|-)(?:(?:S([0-9]{2,})E([0-9]{2,})\b)|(?:([0-9]+)x([0-9]{2,}))|(?:EP([0-9]{2,}))|([0-9]{3}))\b/i;
+var TVTitleRegex = /(?:\s|-)(?:(?:S([0-9]{2,})E([0-9]{2,})\b)|(?:([0-9]+)x([0-9]{2,}))|(?:EP([0-9]{2,}))|([0-9]{3})|(?:([0-9]{4})(?: |-|\/)([0-9]{2})(?: |-|\/)([0-9]{2})))\b/i;
 var MovieTitleRegex = /(?:\b-\b)|(?:\s(?:(?:\(?([0-9]{4})\)?)|4K|2K|1080p|720p|480p|360p|SD|MKV|X264|H264|H\.264|XVID|AC3|AAC|MKV|MP4|AVI|BluRay|Blu-Ray|BRRIP|DVDRip|DVD|DVDR|DVD-R|R[1-9]|HDTV|HDRip|HDTVRip|DTVRip|DTV|TS|TSRip|CAM|CAMRip|ReadNFO|iNTERNAL))(?:\b)/i;
 
 process.title = "NFOMaker";
@@ -201,8 +203,27 @@ var parsedOpts = nomnom
 				full: "dvd-order",
 				abbr: "d",
 				help: "Use DVD ordering instead of aired ordering for episode numbers on TVDB.",
-				default: false,
 				flag: true
+			},
+			noFile: {
+				full: "no-file",
+				abbr: "x",
+				help: "Don't load from a file. Disable screenshots and mediainfo.",
+				flag: true
+			},
+			sceneTitle: {
+				full: "scene-title",
+				help: "Title to use in the output NFO (defaults to an auto-generated one)."
+			},
+			addInfo: {
+				full: "add-info",
+				abbr: "a",
+				help: "Add additional info to the final NFO (useful with -x)."
+			},
+			addShots: {
+				full: "shots",
+				abbr: "b",
+				help: "Add external screenshots (preformatted)."
 			}
 		})
 		.parse();
@@ -224,18 +245,25 @@ if(parsedOpts.signature){
 	opts.signature = "";
 }
 
+// The path should always be right; it's required
+opts.path = parsedOpts.path;
+
+if(parsedOpts.noFile){
+	opts.noMediaInfo = true;
+	opts.snapshotCount = 0;
+	opts.sceneTitle = path.basename(opts.path, path.extname(opts.path));
+}else if(!path.existsSync(opts.path)){
+	// Bug out if the file doesn't exist
+	errorDie('The file "' + opts.path + '" doesn\'t exist!');
+}else{
+	opts.snapshotCount = parsedOpts.snapshotCount;
+	opts.sceneTitle = parsedOpts.sceneTitle;
+}
+
 // Function to bug out in errors
 function errorDie(message){
 	console.error(message);
 	process.exit(1);
-}
-
-// The path should always be right; it's required
-opts.path = parsedOpts.path;
-
-// Bug out if the file doesn't exist
-if(!path.existsSync(opts.path)){
-	errorDie('The file "' + opts.path + '" doesn\'t exist!');
 }
 
 // Set the output file to <mediafilename>.nfo if it's not given.
@@ -451,8 +479,12 @@ function getEpisode(){
 				numbers.push(matches[i]);
 			}
 		}
-		if(numbers.length > 2){
+		if(numbers.length > 3){
 			errorDie("WTF is this? Episode number is badly mangled.");
+		}else if(numbers.length == 3){
+			opts.episode = numbers[0] + "/" + numbers[1] + "/" + numbers[2];
+			opts.season = DATE;
+			searchTVDB();
 		}else if(numbers.length == 2){
 			opts.season = parseInt(numbers[0], 10);
 			opts.episode = parseInt(numbers[1], 10);
@@ -490,7 +522,7 @@ function loadMovie(id){
 			throw error;
 		}else{
 			parseMovie(data[0]);
-			if(waitCalled){
+			if(global.waitCalled){
 				formatOutput();
 			}
 		}
@@ -506,7 +538,7 @@ function parseMovie(movie){
 	meta.certification = movie.certification;
 	meta.runtime = movie.runtime;
 	meta.genres = movie.genres;
-	meta.year = movie.released.split("-")[0];
+	meta.year = ((typeof movie.released == "string") ? movie.released.split("-")[0] : "");
 	if(!meta.year){
 		meta.year = "";
 	}
@@ -555,6 +587,11 @@ function parseTVDBList(list){
 }
 
 function parseTVDBBanners(banners, season, callback){
+	if(banners.BannerPath){
+		// Only one banner?
+		downloadAndReuploadImage("http://thetvdb.com/banners/" + banners.BannerPath, -1, callback);
+		return;
+	}
 	for(var i = 0; i < banners.length; i++){
 		if(banners[i].BannerType2 == "seasonwide" && banners[i].Season == season){
 			downloadAndReuploadImage("http://thetvdb.com/banners/" + banners[i].BannerPath, -1, callback);
@@ -567,6 +604,7 @@ function parseTVDBBanners(banners, season, callback){
 			return;
 		}
 	}
+	callback("");
 }
 
 function parseTVDBData(series, actors, banners, episode){
@@ -626,7 +664,7 @@ function parseTVDBData(series, actors, banners, episode){
 	meta.people = actors;
 	parseTVDBBanners(banners, episode.SeasonNumber, function(poster){
 		meta.poster = poster;
-		if(waitCalled){
+		if(global.waitCalled){
 			formatOutput();
 		}
 	});
@@ -638,32 +676,59 @@ function requestSeries(seriesID){
 			throw(err);
 		}
 		var series = record.Series;
-		// DECIDE ABSOLUTE OR NORMAL; DEFAULT OR DVD SORTING
-		var url;
-		if(opts.season == ABSOLUTE){
-			url = "/series/" + seriesID + "/absolute/" + opts.episode + "/" + LANGUAGE + ".xml";
-		}else{
-			url = "/series/" + seriesID + "/" + (parsedOpts.dvdSort ? "dvd" : "default") + "/" + opts.season + "/" + opts.episode + "/" + LANGUAGE + ".xml";
-		}
-		TVDBStaticRequest(url, function(err, record){
-			if(err){
-				throw(err);
-			}
-			var episode = record.Episode;
-			TVDBStaticRequest("/series/" + seriesID + "/banners.xml", function(err, record){
+		if(opts.season == DATE){
+			TVDBDynamicRequest("GetEpisodeByAirDate", {airdate: opts.episode, seriesid: seriesID}, function(err, record){
 				if(err){
 					throw(err);
 				}
-				var banners = record.Banner;
-				TVDBStaticRequest("/series/" + seriesID + "/actors.xml", function(err, record){
+				TVDBStaticRequest("/episodes/" + record.Episode.id + "/" + LANGUAGE + ".xml", function(err, record){
 					if(err){
 						throw(err);
 					}
-					var actors = record.Actor;
-					parseTVDBData(series, actors, banners, episode);
+					var episode = record.Episode;
+					TVDBStaticRequest("/series/" + seriesID + "/banners.xml", function(err, record){
+						if(err){
+							throw(err);
+						}
+						var banners = record.Banner;
+						TVDBStaticRequest("/series/" + seriesID + "/actors.xml", function(err, record){
+							if(err){
+								throw(err);
+							}
+							var actors = record.Actor;
+							parseTVDBData(series, actors, banners, episode);
+						});
+					});
 				});
 			});
-		});
+		}else{
+			// DECIDE ABSOLUTE OR NORMAL; DEFAULT OR DVD SORTING
+			var url;
+			if(opts.season == ABSOLUTE){
+				url = "/series/" + seriesID + "/absolute/" + opts.episode + "/" + LANGUAGE + ".xml";
+			}else{
+				url = "/series/" + seriesID + "/" + (parsedOpts.dvdSort ? "dvd" : "default") + "/" + opts.season + "/" + opts.episode + "/" + LANGUAGE + ".xml";
+			}
+			TVDBStaticRequest(url, function(err, record){
+				if(err){
+					throw(err);
+				}
+				var episode = record.Episode;
+				TVDBStaticRequest("/series/" + seriesID + "/banners.xml", function(err, record){
+					if(err){
+						throw(err);
+					}
+					var banners = record.Banner;
+					TVDBStaticRequest("/series/" + seriesID + "/actors.xml", function(err, record){
+						if(err){
+							throw(err);
+						}
+						var actors = record.Actor;
+						parseTVDBData(series, actors, banners, episode);
+					});
+				});
+			});
+		}
 	});
 }
 
@@ -735,7 +800,7 @@ function askWhichShow(shows){
 	shows = shows.splice(0, 5);
 	var str = "Search returned multiple shows; listing first " + shows.length + ":\n";
 	for(var i = 0; i < shows.length; i++){
-		str += "[" + i + "] " + shows[i].SeriesName + (shows[i].FirstAired ? " (" + shows[i].FirstAired + "):" : "") + " " + shows[i].Overview + "\n";
+		str += "[" + i + "] " + shows[i].SeriesName + (shows[i].FirstAired ? " (" + shows[i].FirstAired + "):" : ":") + " " + shows[i].Overview + "\n";
 	}
 	str += "Which one of the above shows is correct? [0]: ";
 	function ask(){
@@ -791,6 +856,10 @@ function searchTMDB(){
 
 // Load the MediaInfo on a file
 function loadMediaInfo(){
+	if(opts.noMediaInfo){
+		takeScreenshots();
+		return;
+	}
 	var mediaInfoPath = "mediainfo";
 	if(isWin){
 		mediaInfoPath = __dirname + "/deps/win32/mediainfo.exe";
@@ -834,7 +903,7 @@ function durationToSeconds(str){
 }
 
 function takeScreenshots(){
-	if(parsedOpts.snapshotCount > 0){
+	if(opts.snapshotCount > 0){
 		console.error("Taking snapshots...");
 		takeAndUploadScreenshots(opts.path, durationToSeconds(mediaInfo[0].Duration), false, parsedOpts.snapshotCount, function(URLs, times){
 			console.error("Finished taking screenshots.");
@@ -869,18 +938,19 @@ function guessMoreMeta(){
 	}
 }
 
-var waitCalled = false;
-
 function waitThenFormatOutput(){
 	if(meta.title){
 		// DB Search Finished
 		formatOutput();
 	}else{
-		waitCalled = true;
+		global.waitCalled = true;
 	}
 }
 
 function getQuality(){
+	if(!mediaInfo){
+		return "";
+	}
 	var vertical, horizontal;
 	for(var i = 0; i < mediaInfo.length; i++){
 		var track = mediaInfo[i];
@@ -909,6 +979,9 @@ function getQuality(){
 }
 
 function getCodecs(){
+	if(!mediaInfo){
+		return "";
+	}
 	var videoCodec, audioCodecs = [];
 	for(var i = 0; i < mediaInfo.length; i++){
 		if(mediaInfo[i].type == "Video"){
@@ -923,6 +996,9 @@ function getCodecs(){
 }
 
 function formatTitle(){
+	if(opts.sceneTitle){
+		return opts.sceneTitle;
+	}
 	var format;
 	if(opts.titleFormat){
 		format = opts.titleFormat;
@@ -949,6 +1025,13 @@ function formatTitle(){
 }
 
 function formatMediaInfo(){
+	if(!mediaInfo){
+		if(parsedOpts.addInfo){
+			return "[icon=info2]\n" + parsedOpts.addInfo + "\n";
+		}else{
+			return "";
+		}
+	}
 	var colors = ["purple", "blue", "green", "orange", "red"];
 	var out = "[icon=info2]";
 	for(var i = 0; i < mediaInfo.length; i++){
@@ -964,11 +1047,15 @@ function formatMediaInfo(){
 			}
 		}
 	}
-	return out;
+	if(parsedOpts.addInfo){
+		return out + "\n" + parsedOpts.addInfo + "\n";
+	}else{
+		return out + "\n";
+	}
 }
 
 function formatCast(){
-	if(!meta.people || parsedOpts.maxCastMembers == 0){
+	if(!meta.people || parsedOpts.maxCastMembers == 0 || meta.people.length == 0){
 		return "";
 	}
 	var str = "[icon=cast2]\n";
@@ -1004,13 +1091,16 @@ function formatCast(){
 		}
 	}
 	if(imageCount > 0){
-		return str + imageString + "[/center]\n" + peopleStr;
+		return str + imageString + "[/center]\n" + peopleStr + "\n";
 	}else{
-		return str + peopleStr;
+		return str + peopleStr + "\n";
 	}
 }
 
 function formatScreens(){
+	if(parsedOpts.addShots){
+		return "[icon=screens2]\n" + parsedOpts.addShots + "\n";
+	}
 	if(!meta.screenshots){
 		return "";
 	}
@@ -1019,7 +1109,7 @@ function formatScreens(){
 		str +=  "\nScreenshot " + (i+1) + ", at " + meta.screenshots[i].time + "\n" + 
 				"[img]" + meta.screenshots[i].URL + "[/img]";
 	}
-	return str;
+	return str + "\n";
 }
 
 function formatNote(){
@@ -1028,7 +1118,7 @@ function formatNote(){
 		format = opts.formats.infoFormat;
 	}else{
 		format = "[icon=note2]\n" + 
-				 "Thanks to the original encoder/uploader, %SOURCE%! :bow:";
+				 "Thanks to the original encoder/uploader, %SOURCE%! :bow:\n";
 	}
 	if(opts.source){
 		return format.replace("%SOURCE%", opts.source);
@@ -1063,14 +1153,17 @@ function formatList(list){
 }
 
 function formatLanguages(){
+	if(!mediaInfo){
+		return "";
+	}
 	var audioLanguages = [], textLanguages = [];
 	for(var i = 0; i < mediaInfo.length; i++){
 		if(mediaInfo[i].type == "Audio"){
-			if(audioLanguages.indexOf(mediaInfo[i].Language) == -1){
+			if(typeof mediaInfo[i].Language == "string" && audioLanguages.indexOf(mediaInfo[i].Language) == -1 && mediaInfo[i].Language.match(/\S/)){
 				audioLanguages.push(mediaInfo[i].Language);
 			}
 		}else if(mediaInfo[i].type == "Text"){
-			if(textLanguages.indexOf(mediaInfo[i].Language) == -1){
+			if(typeof mediaInfo[i].Language == "string" && textLanguages.indexOf(mediaInfo[i].Language) == -1 && mediaInfo[i].Language.match(/\S/)){
 				textLanguages.push(mediaInfo[i].Language);
 			}
 		}
@@ -1125,7 +1218,7 @@ function formatInfo(){
 	format = format.replace("%FORMAT_STUDIOS%", formatList(meta.studios));
 	format = format.replace("%FORMAT_GENRES%", formatList(meta.genres));
 	format = format.replace("%FORMAT_LANGUAGES%", formatLanguages());
-	var removeRegex = /\n[^\n]+: \$?(?:undefined|(?:%[A-Z_]+%)|0|0? minutes)?\n/gi
+	var removeRegex = /\n[^\n]+: \$?(?:undefined|(?:%[A-Z_]+%)|0|0? minutes|\[object Object\])?\n/gi
 	while(format.match(removeRegex)){
 		format = format.replace(removeRegex, "\n");
 	}
@@ -1133,7 +1226,7 @@ function formatInfo(){
 }
 
 function formatTrailer(){
-	var format = "[icon=trailer2]\n[video=%YOUTUBE_URL%]";
+	var format = "[icon=trailer2]\n[video=%YOUTUBE_URL%]\n";
 	if(meta.trailer){
 		return format.replace("%YOUTUBE_URL%", meta.trailer);
 	}else{
@@ -1143,16 +1236,42 @@ function formatTrailer(){
 
 function formatPlot(){
 	if(opts.type == TV){
-		return  "[icon=plot2]\n" +
-				"[color=blue]Series plot[/color]: " + meta.series_plot + "\n" +
-				"[color=green]Episode plot[/color]: " + meta.episode_plot;
+		if((typeof meta.series_plot == "string") && (typeof meta.episode_plot == "string")){
+			return  "[icon=plot2]\n" +
+					"[color=blue]Series plot[/color]: " + meta.series_plot + "\n" +
+					"[color=green]Episode plot[/color]: " + meta.episode_plot + "\n";
+		}else if((typeof meta.series_plot == "string")){
+			return  "[icon=plot2]\n" +
+					"[color=blue]Series plot[/color]: " + meta.series_plot + "\n";
+		}else if((typeof meta.episode_plot == "string")){
+			return  "[icon=plot2]\n" +
+					"[color=blue]Episode plot[/color]: " + meta.episode_plot + "\n";
+		}else{
+			return "";
+		}
 	}else{
-		return "[icon=plot2]\n" + meta.plot;
+		return "[icon=plot2]\n" + meta.plot + "\n";
 	}
 }
 
 function writeOutput(data){
 	outStream.write(data);
+}
+
+function formatSignature(){
+	if(opts.signature){
+		return "\n" + opts.signature;
+	}else{
+		return "";
+	}
+}
+
+function formatPoster(){
+	if(meta.poster){
+		return "[center][img]" + meta.poster + "[/img][/center]\n";
+	}else{
+		return "";
+	}
 }
 
 function formatOutput(){
@@ -1162,23 +1281,23 @@ function formatOutput(){
 	if(opts.formats.output){
 		outFormat = opts.formats.output;
 	}else{
-		outFormat = "[center][img]%POSTER_URL%[/img][/center]\n" + 
+		outFormat =  "%POSTER%"+ 
 					"[center][title=%TITLE_COLOR%]%FORMATTED_TITLE%[/title][/center]\n" + 
 					"[b]\n" + 
 					"%INFO%" + 
-					"%MEDIAINFO%\n" + 
-					"%CAST%\n" + 
-					"%PLOT%\n" + 
-					"%SCREENS%\n" + 
-					"%TRAILER%\n" + 
-					"%NOTE%\n" + 
-					"[/b]\n" + 
+					"%MEDIAINFO%" + 
+					"%PLOT%" + 
+					"%CAST%" + 
+					"%SCREENS%" + 
+					"%TRAILER%" + 
+					"%NOTE%" + 
+					"[/b]" + 
 					"%SIGNATURE%";
 	}
 	var output = outFormat
 					.replace("%FORMATTED_TITLE%", formatTitle())
 					.replace("%TITLE_COLOR%", (opts.type == TV) ? "red" : "purple")
-					.replace("%POSTER_URL%", meta.poster)
+					.replace("%POSTER%", formatPoster())
 					.replace("%PLOT%", formatPlot())
 					.replace("%INFO%", formatInfo())
 					.replace("%MEDIAINFO%", formatMediaInfo())
@@ -1186,7 +1305,7 @@ function formatOutput(){
 					.replace("%TRAILER%", formatTrailer())
 					.replace("%SCREENS%", formatScreens())
 					.replace("%NOTE%", formatNote())
-					.replace("%SIGNATURE%", opts.signature);
+					.replace("%SIGNATURE%", formatSignature);
 	writeOutput(output);
 	close();
 }
