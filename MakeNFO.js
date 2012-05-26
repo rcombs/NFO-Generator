@@ -1,4 +1,11 @@
 #! /usr/bin/env node
+	
+// API keys and URL paths
+var	TVDB_API_KEY = "88445D4B8F5F27A3",
+	TMDB_API_KEY = "5261508c7eb4c0ea4a7c335c8d8e2074",
+	TVDB_API_PATH = "http://www.thetvdb.com/",
+	TMDB_API_PATH = "http://api.themoviedb.org/2.1/%method%/%lang%/%type%/%key%/%arg%",
+	LANGUAGE = "en";
 
 // Load libraries
 var http = require("http"),
@@ -11,14 +18,8 @@ var http = require("http"),
 	mime = require("mime"),
 	nomnom = require("nomnom"),
 	xml2js = require("xml2js"),
-	gunzip = require('zlib').gunzip;
-	
-// API keys and URL paths
-var	TVDB_API_KEY = "88445D4B8F5F27A3",
-	TMDB_API_KEY = "5261508c7eb4c0ea4a7c335c8d8e2074",
-	TVDB_API_PATH = "http://www.thetvdb.com/",
-	TMDB_API_PATH = "http://api.themoviedb.org/2.1/%method%/%lang%/%type%/%key%/%arg%",
-	LANGUAGE = "en";
+	gunzip = require('zlib').gunzip,
+	tmdb = require("./tmdb").init(TMDB_API_KEY);
 	
 var parser = new xml2js.Parser();
 	
@@ -110,7 +111,7 @@ var MOVIE = "M",
 
 // Set up the regex for matching TV shows.
 var TVTitleRegex = /(?:\s|-)(?:(?:S([0-9]{2,})E([0-9]{2,})\b)|(?:([0-9]+)x([0-9]{2,}))|(?:EP([0-9]{2,}))|([0-9]{3})|(?:([0-9]{4})(?: |-|\/)([0-9]{2})(?: |-|\/)([0-9]{2})))\b/i;
-var MovieTitleRegex = /(?:\b-\b)|(?:\s(?:(?:\(?([0-9]{4})\)?)|4K|2K|1080p|720p|480p|360p|SD|MKV|X264|H264|H\.264|XVID|AC3|AAC|MKV|MP4|AVI|BluRay|Blu-Ray|BRRIP|DVDRip|DVD|DVDR|DVD-R|R[1-9]|HDTV|HDRip|HDTVRip|DTVRip|DTV|TS|TSRip|CAM|CAMRip|ReadNFO|iNTERNAL))(?:\b)/i;
+var MovieTitleRegex = /(?:\b-\b)|(?:\s(?:(?:(?:\(|\[)?([0-9]{4})(?:\)|\])?)|4K|2K|1080p|720p|480p|360p|SD|MKV|X264|H264|H\.264|XVID|AC3|AAC|MKV|MP4|AVI|BluRay|Blu-Ray|BRRIP|DVDRip|DVD|DVDR|DVD-R|R[1-9]|HDTV|HDRip|HDTVRip|DTVRip|DTV|TS|TSRip|CAM|CAMRip|ReadNFO|iNTERNAL))(?:\b)/i;
 
 process.title = "NFOMaker";
 
@@ -224,6 +225,11 @@ var parsedOpts = nomnom
 				full: "shots",
 				abbr: "b",
 				help: "Add external screenshots (preformatted)."
+			},
+			addNote: {
+				full: "note",
+				abbr: "c",
+				help: "Add a note (greetz, etc...)"
 			}
 		})
 		.parse();
@@ -272,21 +278,9 @@ opts.output = parsedOpts.output || path.dirname(opts.path) + "/" + path.basename
 // Set noInput
 opts.noInput = parsedOpts.noInput;
 
-// Create the file write stream. If the output path is "-", use stdout. Otherwise, write to the filesystem.
-var outStream;
 if(opts.output == "-"){
-	outStream = process.stdout;
 	// Override noInput if writing to stdout.
 	opts.noInput = true;
-}else{
-	outStream = fs.createWriteStream(opts.output, {mode: 0644});
-	outStream.on("error", function(error){
-		if(error.code == "EACCES"){
-			errorDie("Could not write to output file: \"" + opts.output + "\" (access denied)!");
-		}else{
-			errorDie("Error writing to output file: \"" + opts.output + "\" (Code " + error.code + ")!");
-		}
-	});
 }
 
 setTitle("NFOMaker");
@@ -713,6 +707,9 @@ function requestSeries(seriesID){
 				if(err){
 					throw(err);
 				}
+				if(record.body && record.body.h1 == "Not Found"){
+					errorDie("Episode not listed in TVDB!");
+				}
 				var episode = record.Episode;
 				TVDBStaticRequest("/series/" + seriesID + "/banners.xml", function(err, record){
 					if(err){
@@ -827,6 +824,9 @@ function searchTMDB(){
 			if(data.length == 0){
 				errorDie("No movies returned by TMDB!");
 			}else if(data.length == 1){
+				if(!data[0].id){
+					errorDie("No movies returned by TMDB!");
+				}
 				loadMovie(data[0].id);
 			}else{
 				// If there are multiple movie matches, either guess or ask.
@@ -1055,8 +1055,13 @@ function formatMediaInfo(){
 }
 
 function formatCast(){
-	if(!meta.people || parsedOpts.maxCastMembers == 0 || meta.people.length == 0){
+	if(!meta.people || parsedOpts.maxCastMembers == 0){
 		return "";
+	}
+	if(!meta.people.length){
+		if(meta.people.Name){
+			meta.people = [meta.people];
+		}
 	}
 	var str = "[icon=cast2]\n";
 	var imageString = "[center] ";
@@ -1066,7 +1071,7 @@ function formatCast(){
 	var max = parsedOpts.maxCastMembers;
 	var peopleStr = "";
 	for(var i = 0; i < meta.people.length; i++){
-		if(meta.people[i].Image){
+		if(meta.people[i].Name){
 			// Later, possibly download and reupload actor images...
 			meta.people[i].profile = false; //"http://thetvdb.com/banners/" + meta.people[i].Image;
 			meta.people[i].name = meta.people[i].Name;
@@ -1113,9 +1118,12 @@ function formatScreens(){
 }
 
 function formatNote(){
+	if(parsedOpts.addNote){
+		return "[icon=note2]\n" + parsedOpts.addNote + "\n";
+	}
 	var format = "";
-	if(opts.formats.infoFormat){
-		format = opts.formats.infoFormat;
+	if(opts.formats.noteFormat){
+		format = opts.formats.noteFormat;
 	}else{
 		format = "[icon=note2]\n" + 
 				 "Thanks to the original encoder/uploader, %SOURCE%! :bow:\n";
@@ -1254,6 +1262,27 @@ function formatPlot(){
 	}
 }
 
+var outStream;
+
+function createOutStream(){
+	// Create the file write stream. If the output path is "-", use stdout. Otherwise, write to the filesystem.
+	if(opts.output == "-"){
+		outStream = process.stdout;
+		// Override noInput if writing to stdout.
+		opts.noInput = true;
+	}else{
+		outStream = fs.createWriteStream(opts.output, {mode: 0644});
+		outStream.on("error", function(error){
+			if(error.code == "EACCES"){
+				errorDie("Could not write to output file: \"" + opts.output + "\" (access denied)!");
+			}else{
+				errorDie("Error writing to output file: \"" + opts.output + "\" (Code " + error.code + ")!");
+			}
+		});
+	}
+}
+
+
 function writeOutput(data){
 	outStream.write(data);
 }
@@ -1306,6 +1335,7 @@ function formatOutput(){
 					.replace("%SCREENS%", formatScreens())
 					.replace("%NOTE%", formatNote())
 					.replace("%SIGNATURE%", formatSignature);
+	createOutStream();
 	writeOutput(output);
 	close();
 }
