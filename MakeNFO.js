@@ -258,7 +258,7 @@ if(parsedOpts.noFile){
 	opts.noMediaInfo = true;
 	opts.snapshotCount = 0;
 	opts.sceneTitle = path.basename(opts.path, path.extname(opts.path));
-}else if(!path.existsSync(opts.path)){
+}else if(!fs.existsSync(opts.path)){
 	// Bug out if the file doesn't exist
 	errorDie('The file "' + opts.path + '" doesn\'t exist!');
 }else{
