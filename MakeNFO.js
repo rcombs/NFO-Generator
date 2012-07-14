@@ -32,7 +32,9 @@ function setTitle(title){
 }
 
 process.on("exit", function(){
-	setTitle("");
+	if(opts){
+		setTitle("");
+	}
 });
 	
 // Helper functions for TMDB and TVDB
@@ -109,15 +111,17 @@ var MOVIE = "M",
 	ABSOLUTE = "A",
 	DATE = "D";
 
-// Set up the regex for matching TV shows.
+// Set up some reused regexes.
 var TVTitleRegex = /(?:\s|-)(?:(?:S([0-9]{2,})E([0-9]{2,})\b)|(?:([0-9]+)x([0-9]{2,}))|(?:EP([0-9]{2,}))|([0-9]{3})|(?:([0-9]{4})(?: |-|\/)([0-9]{2})(?: |-|\/)([0-9]{2})))\b/i;
 var MovieTitleRegex = /(?:\b-\b)|(?:\s(?:(?:(?:\(|\[)?([0-9]{4})(?:\)|\])?)|4K|2K|1080p|720p|480p|360p|SD|MKV|X264|H264|H\.264|XVID|AC3|AAC|MKV|MP4|AVI|BluRay|Blu-Ray|BRRIP|DVDRip|DVD|DVDR|DVD-R|R[1-9]|HDTV|HDRip|HDTVRip|DTVRip|DTV|TS|TSRip|CAM|CAMRip|ReadNFO|iNTERNAL))(?:\b)/i;
+var RGRegex = /\b(IMMERSE|DIMENSION|LOL|mSD|ORENJI|DHD|ASAP|AFG|THORA|KILLERS|2HD|LMAO|LEGi0N|RiVER|DiVERSiTY|GECKOS|ROVERS|BARGE|CRiMSON|TASTETV|BiA|TLA|BBnRG|KYR|PTpOWeR|MRFIXIT|FRAGMENT|FILMHD|UNVEiL|BLOWME|RELOADED|initialanime|SONiDO|FiHTV|WAF|QCF|SYA|THC|C4TV|DEADPiXEL|KNiFESHARP|eXceSs|SKmbr|RiPRG|UNVEiL|W4F|DEPRiVED)\b/i;
 
 process.title = "NFOMaker";
 
 // Parse arguments with nomnom
 var parsedOpts = nomnom
 		.script("makeNFO")
+		.colors()
 		.options({
 			path: {
 				position: 0,
@@ -128,8 +132,7 @@ var parsedOpts = nomnom
 			output: {
 				position: 1,
 				help: 'File to save the NFO to. Default is the name of the input file with the extension replaced with "nfo". Set to "-" to write to stdout.',
-				list: false,
-				required: false
+				list: false
 			},
 			noGuess: {
 				abbr: "N",
@@ -159,8 +162,7 @@ var parsedOpts = nomnom
 			},
 			source: {
 				abbr: "s",
-				help: "Source RG of the video (OPTIONAL). If specified, they will be credited.",
-				default: ""
+				help: "Source RG of the video (OPTIONAL). If specified, they will be credited."
 			},
 			user: {
 				abbr: "u",
@@ -581,6 +583,10 @@ function parseTVDBList(list){
 }
 
 function parseTVDBBanners(banners, season, callback){
+	if(typeof banners != "object"){
+		callback("");
+		return;
+	}
 	if(banners.BannerPath){
 		// Only one banner?
 		downloadAndReuploadImage("http://thetvdb.com/banners/" + banners.BannerPath, -1, callback);
@@ -606,7 +612,9 @@ function parseTVDBData(series, actors, banners, episode){
 		meta.airs = series.Airs_DayOfWeek + (series.Airs_Time ? (" at " + series.Airs_Time) : "");
 	}
 	meta.series_first_aired = series.FirstAired;
-	meta.year = series.FirstAired.split("-")[0];
+	if(series.FirstAired && series.FirstAired.split){
+		meta.year = series.FirstAired.split("-")[0];
+	}
 	if(!meta.year){
 		meta.year = "";
 	}
@@ -674,6 +682,9 @@ function requestSeries(seriesID){
 			TVDBDynamicRequest("GetEpisodeByAirDate", {airdate: opts.episode, seriesid: seriesID}, function(err, record){
 				if(err){
 					throw(err);
+				}
+				if(record.Error){
+					errorDie("No episode found for that airdate!");
 				}
 				TVDBStaticRequest("/episodes/" + record.Episode.id + "/" + LANGUAGE + ".xml", function(err, record){
 					if(err){
@@ -829,6 +840,20 @@ function searchTMDB(){
 				}
 				loadMovie(data[0].id);
 			}else{
+				if(opts.year){
+					var newList = [];
+					for(var i = 0; i < data.length; i++){
+						var movie = data[i];
+						if(!(typeof movie.released == "string") || movie.released.split("-")[0] == opts.year){
+							newList.push(movie);
+						}
+					}
+					if(newList.length == 1){
+						loadMovie(newList[0].id);
+					}else if(newList.length > 1){
+						data = newList;
+					}
+				}
 				// If there are multiple movie matches, either guess or ask.
 				if(opts.noInput){
 					if(parsedOpts.noGuess){
@@ -847,9 +872,6 @@ function searchTMDB(){
 		TMDBRequest("Movie.imdbLookup", opts.id, parseResponse);
 	}else{
 		var name = opts.name.replace(/( |_)/g, "+");
-		if(opts.year){
-			name += "+" + opts.year;
-		}
 		TMDBRequest("Movie.search", name, parseResponse);
 	}
 }
@@ -984,7 +1006,7 @@ function getCodecs(){
 	}
 	var videoCodec, audioCodecs = [];
 	for(var i = 0; i < mediaInfo.length; i++){
-		if(mediaInfo[i].type == "Video"){
+		if(mediaInfo[i].type == "Video" && !videoCodec){
 			videoCodec = mediaInfo[i].Format;
 		}else if(mediaInfo[i].type == "Audio"){
 			if(audioCodecs.indexOf(mediaInfo[i].Format) == -1){
@@ -1003,7 +1025,7 @@ function formatTitle(){
 	if(opts.titleFormat){
 		format = opts.titleFormat;
 	}else{
-		format = "%TITLE% (%YEAR%) %EPISODE% - %EPISODE_NAME% - %QUALITY% - %CODECS% - %SOURCEMEDIA% - %SOURCE% - %USER%";
+		format = "%TITLE%" + (meta.type == MOVIE ? " (%YEAR%)" : " - %EPISODE% - %EPISODE_NAME%") + " - %QUALITY% - %CODECS% - %SOURCEMEDIA% - %SOURCE% - %USER%";
 	}
 	var title = format
 		.replace("%TITLE%", meta.title)
@@ -1118,9 +1140,6 @@ function formatScreens(){
 }
 
 function formatNote(){
-	if(parsedOpts.addNote){
-		return "[icon=note2]\n" + parsedOpts.addNote + "\n";
-	}
 	var format = "";
 	if(opts.formats.noteFormat){
 		format = opts.formats.noteFormat;
@@ -1128,8 +1147,10 @@ function formatNote(){
 		format = "[icon=note2]\n" + 
 				 "Thanks to the original encoder/uploader, %SOURCE%! :bow:\n";
 	}
-	if(opts.source){
-		return format.replace("%SOURCE%", opts.source);
+	if(parsedOpts.source){
+		return format.replace("%SOURCE%", parsedOpts.source) + (parsedOpts.addNote ? (parsedOpts.addNote + "\n") : "");
+	}else if(parsedOpts.addNote){
+		return "[icon=note2]\n" + parsedOpts.addNote + "\n";
 	}else{
 		return "";
 	}
@@ -1210,12 +1231,12 @@ function formatInfo(){
 					"Director(s): %DIRECTOR%\n"+
 					"Guest Stars: %GUEST_STARS%\n"+
 					"Genres: %FORMAT_GENRES%\n"+
+					"Certification: %CERTIFICATION%\n"+
 					"Series TVDB URL: %SERIES_TVDB_URL%\n"+
 					"Series IMDB URL: %SERIES_IMDB_URL%\n"+
 					"Series Score: %SERIES_SCORE%\n"+
 					"Series First Aired: %SERIES_FIRST_AIRED%\n"+
 					"Series Status: %STATUS%\n"+
-					"Series Certification: %CERTIFICATION%\n"+
 					"Series Airtime: %AIRS%\n"+
 					"Homepage: %HOMEPAGE%\n"+
 					"%FORMAT_LANGUAGES%";
