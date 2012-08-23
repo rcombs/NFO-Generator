@@ -1,3 +1,4 @@
+[![build status](https://secure.travis-ci.org/11rcombs/NFO-Generator.png)](http://travis-ci.org/11rcombs/NFO-Generator)
 NFO-Generator
 =============
 
