@@ -315,6 +315,10 @@ var processQuery = function(url, error, response, body, callback) {
         return;
     }
 
+	if(error || !res){
+		callback(error,res);
+	}
+
 	if(res.status_code) {
 		switch(res.status_code) {
 			case 6: // Invalid id

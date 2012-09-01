@@ -235,6 +235,15 @@ var parsedOpts = nomnom
 			}
 		})
 		.parse();
+		
+var presetOpts = {};
+if(fs.existsSync("~/.mknfo_settings")){
+	try{
+		presetOpts = JSON.parse(fs.readFileSync("~/.mknfo_settings"));
+	}catch(e){
+		// gulp(e);
+	}
+}
 
 // Setup an object to store options and meta that have been parsed and checked
 var opts = {
@@ -249,6 +258,8 @@ if(parsedOpts.sourceMedia){
 
 if(parsedOpts.signature){
 	opts.signature = parsedOpts.signature;
+}else if(presetOpts.signature){
+	opts.signature = presetOpts.signature;
 }else{
 	opts.signature = "";
 }
@@ -516,6 +527,8 @@ function loadMovie(id){
 	var parseResponse = function(error, data){
 		if(error){
 			throw error;
+		}else if(!data){
+			errorDie(error + " " + data);
 		}else{
 			parseMovie(data[0]);
 			if(global.waitCalled){
@@ -831,6 +844,8 @@ function searchTMDB(){
 	var parseResponse = function(error, data){
 		if(error){
 			throw error;
+		}else if(!data){
+			errorDie(error + " " + data);
 		}else{
 			if(data.length == 0){
 				errorDie("No movies returned by TMDB!");
@@ -1040,6 +1055,7 @@ function formatTitle(){
 		.replace("%USER%", parsedOpts.user)
 		.replace(/  +/g, " ")
 		.replace(/ undefined /g, " ")
+		.replace(/ null /g, " ")
 		.replace(/-(?: -)+/g, "-")
 		.replace(/ ?\(\)/g, " ")
 		.replace(/ ?-? $/,"");
@@ -1247,7 +1263,7 @@ function formatInfo(){
 	format = format.replace("%FORMAT_STUDIOS%", formatList(meta.studios));
 	format = format.replace("%FORMAT_GENRES%", formatList(meta.genres));
 	format = format.replace("%FORMAT_LANGUAGES%", formatLanguages());
-	var removeRegex = /\n[^\n]+: \$?(?:undefined|(?:%[A-Z_]+%)|0|0? minutes|\[object Object\])?\n/gi
+	var removeRegex = /\n[^\n]+: \$?(?:undefined|null|(?:%[A-Z_]+%)|0|0? minutes|\[object Object\])?\n/gi
 	while(format.match(removeRegex)){
 		format = format.replace(removeRegex, "\n");
 	}
