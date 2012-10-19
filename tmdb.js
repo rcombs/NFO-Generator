@@ -317,6 +317,7 @@ var processQuery = function(url, error, response, body, callback) {
 
 	if(error || !res){
 		callback(error,res);
+		return;
 	}
 
 	if(res.status_code) {

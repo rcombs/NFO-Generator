@@ -24,7 +24,7 @@ var http = require("http"),
 var parser = new xml2js.Parser();
 	
 function setTitle(title){
-	if(!opts.noInput){
+	if(opts && !opts.noInput){
 		if(!isWin){
 			process.stdout.write("\033]0;" + title + "\007");
 		}
@@ -113,7 +113,7 @@ var MOVIE = "M",
 
 // Set up some reused regexes.
 var TVTitleRegex = /(?:\s|-)(?:(?:S([0-9]{2,})E([0-9]{2,})\b)|(?:([0-9]+)x([0-9]{2,}))|(?:EP([0-9]{2,}))|([0-9]{3})|(?:([0-9]{4})(?: |-|\/)([0-9]{2})(?: |-|\/)([0-9]{2})))\b/i;
-var MovieTitleRegex = /(?:\b-\b)|(?:\s(?:(?:(?:\(|\[)?([0-9]{4})(?:\)|\])?)|4K|2K|1080p|720p|480p|360p|SD|MKV|X264|H264|H\.264|XVID|AC3|AAC|MKV|MP4|AVI|BluRay|Blu-Ray|BRRIP|DVDRip|DVD|DVDR|DVD-R|R[1-9]|HDTV|HDRip|HDTVRip|DTVRip|DTV|TS|TSRip|CAM|CAMRip|ReadNFO|iNTERNAL))(?:\b)/i;
+var MovieTitleRegex = /(?:\b-\b)|(?:\s(?:(?:(?:\(|\[)?([0-9]{4})(?:\)|\])?)|4K|2K|1080p|720p|480p|360p|SD|MKV|X264|H264|H\.264|XVID|AC3|AAC|MKV|MP4|AVI|BluRay|Blu-Ray|BRRIP|DVDRip|DVD|DVDR|DVD-R|R[1-9]|HDTV|HDRip|HDTVRip|DTVRip|DTV|TS|TSRip|CAM|CAMRip|ReadNFO|iNTERNAL))(?:\b)|\(|\[/i;
 var RGRegex = /\b(IMMERSE|DIMENSION|LOL|mSD|ORENJI|DHD|ASAP|AFG|THORA|KILLERS|2HD|LMAO|LEGi0N|RiVER|DiVERSiTY|GECKOS|ROVERS|BARGE|CRiMSON|TASTETV|BiA|TLA|BBnRG|KYR|PTpOWeR|MRFIXIT|FRAGMENT|FILMHD|UNVEiL|BLOWME|RELOADED|initialanime|SONiDO|FiHTV|WAF|QCF|SYA|THC|C4TV|DEADPiXEL|KNiFESHARP|eXceSs|SKmbr|RiPRG|UNVEiL|W4F|DEPRiVED)\b/i;
 
 process.title = "NFOMaker";
@@ -235,6 +235,9 @@ var parsedOpts = nomnom
 			}
 		})
 		.parse();
+if(process.argv.indexOf("-") != -1){
+	parsedOpts.output = "-";
+}
 		
 var presetOpts = {};
 if(fs.existsSync("~/.mknfo_settings")){
@@ -310,7 +313,9 @@ function close(){
 	// them, it would run forever.
 	rl.close();
 	process.stdin.destroy();
-	outStream.end();
+	if(opts.output != "-"){
+		outStream.end();
+	}
 }
 
 if(parsedOpts.episodeID){
@@ -621,8 +626,8 @@ function parseTVDBBanners(banners, season, callback){
 }
 
 function parseTVDBData(series, actors, banners, episode){
-	if(series.Airs_DayOfWeek){
-		meta.airs = series.Airs_DayOfWeek + (series.Airs_Time ? (" at " + series.Airs_Time) : "");
+	if(typeof series.Airs_DayOfWeek == "string"){
+		meta.airs = series.Airs_DayOfWeek + ((typeof series.Airs_Time == "string") ? (" at " + series.Airs_Time) : "");
 	}
 	meta.series_first_aired = series.FirstAired;
 	if(series.FirstAired && series.FirstAired.split){
@@ -802,7 +807,7 @@ function searchTVDB(){
 						// If no guessing, die
 						errorDie("No guessing allowed, and no input allowed!");
 					}else{
-						requestSeries(record[0].Series.seriesid);
+						requestSeries(record.Series[0].seriesid);
 					}
 				}else{
 					askWhichShow(record.Series);
@@ -1065,13 +1070,13 @@ function formatTitle(){
 function formatMediaInfo(){
 	if(!mediaInfo){
 		if(parsedOpts.addInfo){
-			return "[icon=info2]\n" + parsedOpts.addInfo + "\n";
+			return "[icon=info3]\n" + parsedOpts.addInfo + "\n";
 		}else{
 			return "";
 		}
 	}
 	var colors = ["purple", "blue", "green", "orange", "red"];
-	var out = "[icon=info2]";
+	var out = "[icon=info3]";
 	for(var i = 0; i < mediaInfo.length; i++){
 		var track = mediaInfo[i];
 		var color = colors[i%5];
@@ -1101,7 +1106,7 @@ function formatCast(){
 			meta.people = [meta.people];
 		}
 	}
-	var str = "[icon=cast2]\n";
+	var str = "[icon=cast3]\n";
 	var imageString = "[center] ";
 	var imageCount = 0;
 	var imageMax = 3;
@@ -1142,12 +1147,12 @@ function formatCast(){
 
 function formatScreens(){
 	if(parsedOpts.addShots){
-		return "[icon=screens2]\n" + parsedOpts.addShots + "\n";
+		return "[icon=screens3]\n" + parsedOpts.addShots + "\n";
 	}
 	if(!meta.screenshots){
 		return "";
 	}
-	var str = "[icon=screens2]";
+	var str = "[icon=screens3]";
 	for(var i = 0; i < meta.screenshots.length; i++){
 		str +=  "\nScreenshot " + (i+1) + ", at " + meta.screenshots[i].time + "\n" + 
 				"[img]" + meta.screenshots[i].URL + "[/img]";
@@ -1160,13 +1165,13 @@ function formatNote(){
 	if(opts.formats.noteFormat){
 		format = opts.formats.noteFormat;
 	}else{
-		format = "[icon=note2]\n" + 
+		format = "[icon=note3]\n" + 
 				 "Thanks to the original encoder/uploader, %SOURCE%! :bow:\n";
 	}
 	if(parsedOpts.source){
 		return format.replace("%SOURCE%", parsedOpts.source) + (parsedOpts.addNote ? (parsedOpts.addNote + "\n") : "");
 	}else if(parsedOpts.addNote){
-		return "[icon=note2]\n" + parsedOpts.addNote + "\n";
+		return "[icon=note3]\n" + parsedOpts.addNote + "\n";
 	}else{
 		return "";
 	}
@@ -1228,7 +1233,7 @@ function formatInfo(){
 	if(opts.formats.infoFormat){
 		format = opts.formats.infoFormat;
 	}else{
-		format = 	"[icon=details2]\n"+
+		format = 	"[icon=details3]\n"+
 					"Title: %TITLE%\n"+
 					"Year: %YEAR%\n"+
 					"Aired Episode: %AIRED_EPISODE%\n"+
@@ -1271,7 +1276,7 @@ function formatInfo(){
 }
 
 function formatTrailer(){
-	var format = "[icon=trailer2]\n[video=%YOUTUBE_URL%]\n";
+	var format = "[icon=trailer3]\n[video=%YOUTUBE_URL%]\n";
 	if(meta.trailer){
 		return format.replace("%YOUTUBE_URL%", meta.trailer);
 	}else{
@@ -1282,20 +1287,20 @@ function formatTrailer(){
 function formatPlot(){
 	if(opts.type == TV){
 		if((typeof meta.series_plot == "string") && (typeof meta.episode_plot == "string")){
-			return  "[icon=plot2]\n" +
+			return  "[icon=plot3]\n" +
 					"[color=blue]Series plot[/color]: " + meta.series_plot + "\n" +
 					"[color=green]Episode plot[/color]: " + meta.episode_plot + "\n";
 		}else if((typeof meta.series_plot == "string")){
-			return  "[icon=plot2]\n" +
+			return  "[icon=plot3]\n" +
 					"[color=blue]Series plot[/color]: " + meta.series_plot + "\n";
 		}else if((typeof meta.episode_plot == "string")){
-			return  "[icon=plot2]\n" +
+			return  "[icon=plot3]\n" +
 					"[color=blue]Episode plot[/color]: " + meta.episode_plot + "\n";
 		}else{
 			return "";
 		}
 	}else{
-		return "[icon=plot2]\n" + meta.plot + "\n";
+		return "[icon=plot3]\n" + meta.plot + "\n";
 	}
 }
 
