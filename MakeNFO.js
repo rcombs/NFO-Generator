@@ -20,6 +20,8 @@ var http = require("http"),
 	xml2js = require("xml2js"),
 	gunzip = require('zlib').gunzip,
 	tmdb = require("./tmdb").init(TMDB_API_KEY);
+
+//console.log(request);
 	
 var parser = new xml2js.Parser();
 	
@@ -49,15 +51,13 @@ function TMDBRequest(method, arg, callback, i){
 	var url = TMDB_API_PATH.replace("%method%", method).replace("%lang%", LANGUAGE).replace("%type%", "json").replace("%key%", TMDB_API_KEY).replace("%arg%", arg);
 	request({url: url}, function(error, response, body){
 		if(error){
-			TMDBRequest(method, arg, callback, i+1);
-		}else{
-			var out;
-			try{
-				out = JSON.parse(body);
-			}catch(e){
-				TMDBRequest(method, arg, callback, i+1);
-			}
+			return TMDBRequest(method, arg, callback, i+1);
+		}
+		try{
+			var out = JSON.parse(body);
 			callback(null, out);
+		}catch(e){
+			TMDBRequest(method, arg, callback, i+1);
 		}
 	});}
 function TVDBStaticRequest(path, callback){
@@ -1401,14 +1401,15 @@ function downloadAndReuploadImage(url, resize, callback){
 */
 function uploadLookpic(data, type, resize, callback){
 	var multipart = [
-			{body: new Buffer(data, "binary"), "Content-Disposition": 'form-data; name="image"; filename="image.' + mime.extension(type) + '"', "Content-Type": type},
-			{body: "5000000", "Content-Disposition": 'form-data; name="MAX_FILE_SIZE"'},
-			{body: Math.max(resize, 0).toString(10), "Content-Disposition": 'form-data; name="resize"'},
-			{body: "Upload", "Content-Disposition": 'form-data; name="submit"'}
-		];
+		{body: data, "Content-Disposition": 'form-data; name="image"; filename="image.' + mime.extension(type) + '"', "Content-Type": type},
+		{body: "5000000", "Content-Disposition": 'form-data; name="MAX_FILE_SIZE"'},
+		{body: Math.max(resize, 0).toString(10), "Content-Disposition": 'form-data; name="resize"'},
+		{body: "Upload", "Content-Disposition": 'form-data; name="submit"'}
+	];
 	if(resize > -1){
 		multipart.push({body: "1", "Content-Disposition": 'form-data; name="stat_resize"'});
 	}
+        //console.log(multipart);
 	request.post({
 		url: "http://lookpic.com/upload.php",
 		multipart: multipart,
@@ -1423,11 +1424,20 @@ function uploadLookpic(data, type, resize, callback){
 		if(err){
 			throw(err);
 		}else{
+			var match = body.match(/\[IMG\](.*)\[\/IMG\]/i);
+			if(match){
+				callback(match[1].replace("/t2/", "/i2/"));
+			}else{
+				console.error(body);
+				throw new Error();
+			}
+/*
 			try{
 				callback(body.match(/\[IMG\](.*)\[\/IMG\]/i)[1].replace("/t2/", "/i2/"));
 			}catch(err){
 				throw(err);
 			}
+*/
 		}
 	});
 }
@@ -1455,14 +1465,14 @@ function takeScreenshot(path, time, size, callback){
 	if(isMac){
 		ffmpegPath = __dirname + "/deps/darwin/ffmpeg";
 	}
-	return child_process.exec('"' + ffmpegPath + '" -ss ' + time + ' -i "' + path + '" -vframes 1 -y' + size + ' -sameq -vcodec png -f image2 -', {
-		maxBuffer: 1000000000*1024,
-		encoding: "binary"
-	}, function(error, data) {
+	return child_process.exec('"' + ffmpegPath + '" -ss ' + time + ' -i "' + path + '" -vframes 1 -compression_level 9 -y' + size + ' -filter:v format=rgb24 -vcodec png -f image2 -', {
+		maxBuffer: 100000000000*1024,
+		timeout: 0
+	}, function(error, data, stderr) {
 		if(error){
 			throw(error);
 		}else if(callback) {
-			callback(data);
+			callback(new Buffer(data));
 		}
 	});
 }
